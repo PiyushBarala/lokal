@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ──────────────────────────────────────────────── */
+:root {
+  /* Spotify-inspired palette */
+  --color-bg-base:       #121212;
+  --color-bg-elevated:   #1a1a1a;
+  --color-bg-highlight:  #282828;
+  --color-bg-press:      #333333;
+  --color-accent:        #1db954;
+  --color-accent-hover:  #1ed760;
+  --color-text-primary:  #ffffff;
+  --color-text-secondary:#b3b3b3;
+  --color-text-subdued:  #535353;
+  --color-border:        #282828;
+
+  /* Layout */
+  --sidebar-width:        240px;
+  --nowplaying-height:    90px;
+  --titlebar-height:      32px;
+
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+}
+
+/* ── Reset ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  overflow: hidden;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #404040; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #535353; }
+
+/* ── Utilities ──────────────────────────────────────────────────── */
+.drag-region { -webkit-app-region: drag; }
+.no-drag      { -webkit-app-region: no-drag; }
+
+.text-ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Immersive Ambient Drift Animation ──────────────────────────── */
+@keyframes ambientDrift {
+  0% {
+    transform: scale(1.15) translate(0px, 0px) rotate(0deg);
+  }
+  33% {
+    transform: scale(1.22) translate(-16px, 14px) rotate(1deg);
+  }
+  66% {
+    transform: scale(1.18) translate(18px, -12px) rotate(-1deg);
+  }
+  100% {
+    transform: scale(1.15) translate(0px, 0px) rotate(0deg);
+  }
+}
+
+.animate-ambient-drift {
+  animation: ambientDrift 26s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* ── Dynamic Fluid Gradient Mesh Animations ────────────────────── */
+@keyframes fluidBlob1 {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg) scale(1);
+  }
+  33% {
+    transform: translate(140px, -80px) rotate(120deg) scale(1.25);
+  }
+  66% {
+    transform: translate(-90px, 110px) rotate(240deg) scale(0.92);
+  }
+  100% {
+    transform: translate(0px, 0px) rotate(360deg) scale(1);
+  }
+}
+
+@keyframes fluidBlob2 {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg) scale(1.1);
+  }
+  33% {
+    transform: translate(-130px, 90px) rotate(-110deg) scale(0.88);
+  }
+  66% {
+    transform: translate(110px, -120px) rotate(-230deg) scale(1.28);
+  }
+  100% {
+    transform: translate(0px, 0px) rotate(-360deg) scale(1.1);
+  }
+}
+
+@keyframes fluidBlob3 {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg) scale(0.95);
+  }
+  50% {
+    transform: translate(-80px, -90px) rotate(180deg) scale(1.3);
+  }
+  100% {
+    transform: translate(0px, 0px) rotate(360deg) scale(0.95);
+  }
+}
+
+.animate-fluid-blob-1 {
+  animation: fluidBlob1 20s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+.animate-fluid-blob-2 {
+  animation: fluidBlob2 25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+.animate-fluid-blob-3 {
+  animation: fluidBlob3 17s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+

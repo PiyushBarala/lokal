@@ -1,0 +1,45 @@
+appId: com.lokal.music
+productName: Lokal
+directories:
+  output: dist
+  buildResources: build
+electronDist: node_modules/electron/dist
+files:
+  - out/**/*
+  - build/**/*
+  - resources/**/*
+  - package.json
+extraResources:
+  - from: node_modules/sql.js/dist/sql-wasm.wasm
+    to: sql-wasm.wasm
+  - from: build/icon.ico
+    to: icon.ico
+  - from: build/icon.png
+    to: icon.png
+  - from: resources/bin/yt-dlp.exe
+    to: bin/yt-dlp.exe
+  - from: resources/bin/ffmpeg.exe
+    to: bin/ffmpeg.exe
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+nsis:
+  include: build/installer.nsh
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Lokal
+  runAfterFinish: true
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}
