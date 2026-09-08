@@ -1,4 +1,4 @@
-import type { ScanProgress, Track, Album, Artist, Playlist, YtSearchResult, DownloadProgress } from './types'
+import type { ScanProgress, Track, Album, Artist, Playlist, YtSearchResult, DownloadProgress, UpdateStatus } from './types'
 
 type RepeatMode = 'off' | 'all' | 'one'
 
@@ -93,6 +93,14 @@ declare global {
         getDefaultFolder: () => Promise<string>
         pickFolder: () => Promise<string | null>
         onProgress: (cb: (progress: DownloadProgress) => void) => () => void
+      }
+      updater: {
+        getVersion: () => Promise<string>
+        getLastStatus: () => Promise<UpdateStatus>
+        checkForUpdates: () => Promise<{ success: boolean; error?: string }>
+        downloadUpdate: () => Promise<{ success: boolean; error?: string }>
+        quitAndInstall: () => Promise<void>
+        onStatus: (cb: (status: UpdateStatus) => void) => () => void
       }
     }
   }

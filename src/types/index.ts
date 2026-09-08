@@ -92,3 +92,17 @@ export interface DownloadItem extends YtSearchResult {
   filePath?: string
   error?: string
 }
+
+export interface UpdateStatus {
+  type: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  currentVersion: string
+  version?: string
+  percent?: number
+  bytesPerSecond?: number
+  transferred?: number
+  total?: number
+  releaseNotes?: string
+  error?: string
+  message?: string
+}
+

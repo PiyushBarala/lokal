@@ -1,5 +1,9 @@
 appId: com.lokal.music
 productName: Lokal
+publish:
+  provider: github
+  owner: PiyushBarala
+  repo: lokal
 directories:
   output: dist
   buildResources: build

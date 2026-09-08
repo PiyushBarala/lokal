@@ -4,6 +4,7 @@ import { usePlayerStore } from '../stores/playerStore'
 import { useLibraryStore } from '../stores/libraryStore'
 import { seekAudio } from './AudioEngine'
 import lokalLogo from '../../public/lokal.png'
+import type { UpdateStatus } from '../types'
 
 // ── Zoom management ───────────────────────────────────────────────
 let currentZoom = 1.0
@@ -25,6 +26,36 @@ export function resetZoom(): void {
 
 // ── About Modal ───────────────────────────────────────────────────
 function AboutModal({ onClose }: { onClose: () => void }) {
+  const [version, setVersion] = useState('1.1.1')
+  const [status, setStatus] = useState<UpdateStatus | null>(null)
+  const [isChecking, setIsChecking] = useState(false)
+
+  useEffect(() => {
+    window.lokal?.updater?.getVersion().then(setVersion).catch(() => {})
+    window.lokal?.updater?.getLastStatus().then(setStatus).catch(() => {})
+
+    const unsub = window.lokal?.updater?.onStatus((newStatus) => {
+      setStatus(newStatus)
+      if (newStatus.type !== 'checking') {
+        setIsChecking(false)
+      }
+    })
+    return unsub
+  }, [])
+
+  const handleCheckUpdates = async () => {
+    setIsChecking(true)
+    try {
+      await window.lokal?.updater?.checkForUpdates()
+    } catch {
+      setIsChecking(false)
+    }
+  }
+
+  const handleInstall = () => {
+    window.lokal?.updater?.quitAndInstall()
+  }
+
   return (
     <div
       className="fixed inset-0 z-[300] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
@@ -51,15 +82,93 @@ function AboutModal({ onClose }: { onClose: () => void }) {
         />
 
         <h2 className="text-xl font-bold text-white tracking-tight">Lokal</h2>
-        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-accent/20 text-accent mt-1 mb-3">
-          v1.1.1 (Windows x64)
+        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-accent/20 text-accent mt-1 mb-3">
+          v{version} (Windows x64)
         </span>
 
-        <p className="text-sm text-[#b3b3b3] leading-relaxed mb-6">
-          A local-first offline music player inspired by Spotify desktop, built for your personal music library with support for download music online.
+        <p className="text-sm text-[#b3b3b3] leading-relaxed mb-4">
+          A local-first offline music player inspired by Spotify desktop, built for your personal music library with online discovery.
         </p>
 
-        <div className="w-full bg-[#181818] rounded-xl p-3 text-xs text-[#888] space-y-1 text-left mb-6 border border-white/5">
+        {/* ── Auto-Updater Section ── */}
+        <div className="w-full bg-[#181818] rounded-xl p-3.5 mb-4 border border-white/10 flex flex-col items-center text-center">
+          {status?.type === 'checking' || isChecking ? (
+            <div className="flex items-center gap-2 text-xs text-[#b3b3b3] py-1">
+              <div className="w-3.5 h-3.5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <span>Checking for updates...</span>
+            </div>
+          ) : status?.type === 'downloading' ? (
+            <div className="w-full space-y-1.5 py-0.5">
+              <div className="flex justify-between text-xs text-[#b3b3b3]">
+                <span>Downloading v{status.version}...</span>
+                <span className="font-mono text-white">{status.percent ?? 0}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-all duration-300 rounded-full"
+                  style={{ width: `${status.percent ?? 0}%` }}
+                />
+              </div>
+            </div>
+          ) : status?.type === 'downloaded' ? (
+            <div className="w-full flex flex-col items-center gap-2 py-0.5">
+              <div className="flex items-center gap-1.5 text-xs text-accent font-semibold">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                </svg>
+                <span>v{status.version} ready to install!</span>
+              </div>
+              <button
+                onClick={handleInstall}
+                className="w-full py-2 rounded-lg bg-accent text-black font-bold text-xs hover:bg-accent/90 transition-all shadow-md active:scale-95"
+              >
+                Restart & Install Now
+              </button>
+            </div>
+          ) : status?.type === 'available' ? (
+            <div className="flex items-center gap-2 text-xs text-white py-1">
+              <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
+              <span>New version available (v{status.version}). Downloading...</span>
+            </div>
+          ) : status?.type === 'not-available' ? (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-1.5 text-xs text-white/80">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" className="text-accent">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                </svg>
+                <span>Up to date</span>
+              </div>
+              <button
+                onClick={handleCheckUpdates}
+                className="text-[11px] text-[#b3b3b3] hover:text-white underline transition-colors"
+              >
+                Check again
+              </button>
+            </div>
+          ) : status?.type === 'error' ? (
+            <div className="flex flex-col items-center gap-1 w-full">
+              <span className="text-[11px] text-red-400">{status.message || 'Check failed'}</span>
+              <button
+                onClick={handleCheckUpdates}
+                className="text-[11px] text-white/90 hover:text-white underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleCheckUpdates}
+              className="w-full py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white font-medium text-xs transition-colors flex items-center justify-center gap-2"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" className="text-[#b3b3b3]">
+                <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" />
+              </svg>
+              Check for Updates
+            </button>
+          )}
+        </div>
+
+        <div className="w-full bg-[#181818] rounded-xl p-3 text-xs text-[#888] space-y-1 text-left mb-5 border border-white/5">
           <div className="flex justify-between">
             <span>Platform</span>
             <span className="text-white font-medium">Windows</span>
@@ -108,8 +217,24 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
   const [isOpen, setIsOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState<MenuCategory>(null)
   const [showAbout, setShowAbout] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    window.lokal?.updater?.getLastStatus().then(setUpdateStatus).catch(() => {})
+    const unsub = window.lokal?.updater?.onStatus((st) => {
+      setUpdateStatus(st)
+      if (st.type === 'downloaded') {
+        window.dispatchEvent(
+          new CustomEvent('lokal:toast', {
+            detail: `✨ Lokal update ready! Open About to restart & install.`
+          })
+        )
+      }
+    })
+    return unsub
+  }, [])
 
   const {
     isPlaying,
@@ -438,12 +563,17 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
                 }`}
               onMouseEnter={() => setActiveCategory('help')}
             >
-              <span>Help</span>
+              <div className="flex items-center gap-2">
+                <span>Help</span>
+                {(updateStatus?.type === 'available' || updateStatus?.type === 'downloaded') && (
+                  <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                )}
+              </div>
               <ChevronRight />
 
               {/* Submenu: Help */}
               {activeCategory === 'help' && (
-                <div className="absolute left-full top-0 ml-1 min-w-[180px] bg-[#282828] rounded-md shadow-2xl py-1 border border-[#3e3e3e] text-xs">
+                <div className="absolute left-full top-0 ml-1 min-w-[190px] bg-[#282828] rounded-md shadow-2xl py-1 border border-[#3e3e3e] text-xs">
                   <div
                     onClick={() => {
                       closeMenu()
@@ -452,6 +582,21 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
                     className="px-3 py-1.5 flex items-center justify-between hover:bg-[#333333] hover:text-white cursor-pointer"
                   >
                     <span>About Lokal</span>
+                  </div>
+                  <div
+                    onClick={() => {
+                      closeMenu()
+                      setShowAbout(true)
+                      window.lokal?.updater?.checkForUpdates().catch(() => {})
+                    }}
+                    className="px-3 py-1.5 flex items-center justify-between hover:bg-[#333333] hover:text-white cursor-pointer"
+                  >
+                    <span>Check for Updates...</span>
+                    {updateStatus?.type === 'downloaded' && (
+                      <span className="text-[10px] text-accent font-semibold px-1 py-0.5 bg-accent/15 rounded">
+                        Ready
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

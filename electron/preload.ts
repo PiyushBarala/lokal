@@ -147,6 +147,31 @@ const api = {
       ipcRenderer.on('ytdlp:progress', handler)
       return () => ipcRenderer.removeListener('ytdlp:progress', handler)
     }
+  },
+
+  // Auto-Updater
+  updater: {
+    getVersion: (): Promise<string> => ipcRenderer.invoke('updater:get-version'),
+    getLastStatus: (): Promise<any> => ipcRenderer.invoke('updater:get-last-status'),
+    checkForUpdates: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('updater:check'),
+    downloadUpdate: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('updater:download'),
+    quitAndInstall: (): Promise<void> => ipcRenderer.invoke('updater:install'),
+    onStatus: (cb: (status: {
+      type: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+      currentVersion: string
+      version?: string
+      percent?: number
+      bytesPerSecond?: number
+      transferred?: number
+      total?: number
+      releaseNotes?: string
+      error?: string
+      message?: string
+    }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: any) => cb(data)
+      ipcRenderer.on('updater:status', handler)
+      return () => ipcRenderer.removeListener('updater:status', handler)
+    }
   }
 }
 

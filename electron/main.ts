@@ -6,6 +6,7 @@ import { registerScannerHandlers } from './ipc/scanner'
 import { registerYtDlpHandlers } from './ipc/ytdlp'
 import { initDb } from './db/database'
 import { registerDbHandlers } from './db/dbHandlers'
+import { registerUpdaterHandlers, checkForUpdatesQuietly } from './ipc/updater'
 
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.lokal.music')
@@ -316,6 +317,12 @@ app.whenReady().then(async () => {
   })
 
   createWindow()
+  registerUpdaterHandlers(mainWindow)
+
+  // Subtle background update check after app startup
+  setTimeout(() => {
+    checkForUpdatesQuietly()
+  }, 6000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
