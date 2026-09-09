@@ -175,7 +175,7 @@ export function registerYtDlpHandlers(): void {
     'ytdlp:download',
     async (
       event,
-      { videoId, targetFolder }: { videoId: string; targetFolder?: string }
+      { videoId, title, targetFolder }: { videoId: string; title?: string; targetFolder?: string }
     ): Promise<{ success: boolean; filePath?: string; error?: string }> => {
       if (!videoId) return { success: false, error: 'No videoId provided' }
 
@@ -199,7 +199,7 @@ export function registerYtDlpHandlers(): void {
         fs.mkdirSync(outDir, { recursive: true })
       }
 
-      console.log(`[yt-dlp download] Starting download: ${videoId} -> ${outDir}`)
+      console.log(`[yt-dlp download] Starting download: ${videoId} (${title || 'no title'}) -> ${outDir}`)
 
       return new Promise((resolve) => {
         const args = [
@@ -215,6 +215,7 @@ export function registerYtDlpHandlers(): void {
           '--retries', '5',
           '--fragment-retries', '5',
           '--socket-timeout', '30',
+          '--print', 'after_move:filepath',
           '--newline'
         ]
 
@@ -243,6 +244,12 @@ export function registerYtDlpHandlers(): void {
           for (const line of lines) {
             const trimmed = line.trim()
             if (!trimmed) continue
+
+            // Check if yt-dlp printed the final after_move filepath (direct MP3 path)
+            if (trimmed.toLowerCase().endsWith('.mp3') && (trimmed.includes(outDir) || path.isAbsolute(trimmed))) {
+              resolvedFilePath = trimmed
+              continue
+            }
 
             // 1. Check download progress regex
             // e.g. [download]  42.3% of 3.45MiB at 1.2MiB/s ETA 00:05
@@ -274,13 +281,20 @@ export function registerYtDlpHandlers(): void {
               })
             }
 
-            // 3. Detect destination file path
-            const destMatch = trimmed.match(/\[(?:ExtractAudio|download)\]\s+Destination:\s+(.+)$/)
+            // 3. Detect destination file path (only accept if it's the audio/mp3 file, NOT image thumbnails)
+            const destAudioMatch = trimmed.match(/\[ExtractAudio\]\s+Destination:\s+(.+\.mp3)$/i)
+            if (destAudioMatch) {
+              resolvedFilePath = destAudioMatch[1].trim()
+              continue
+            }
+
+            const destMatch = trimmed.match(/\[download\]\s+Destination:\s+(.+)$/)
             if (destMatch) {
               const candidate = destMatch[1].trim()
-              if (candidate.endsWith('.mp3')) {
+              if (candidate.toLowerCase().endsWith('.mp3')) {
                 resolvedFilePath = candidate
-              } else {
+              } else if (!candidate.match(/\.(webp|jpg|jpeg|png)$/i)) {
+                // Audio intermediate format (e.g. .opus, .webm, .m4a)
                 resolvedFilePath = candidate.replace(/\.[^.]+$/, '.mp3')
               }
             }
@@ -288,9 +302,9 @@ export function registerYtDlpHandlers(): void {
             const alreadyMatch = trimmed.match(/\[download\]\s+(.+?)\s+has already been downloaded/)
             if (alreadyMatch) {
               const candidate = alreadyMatch[1].trim()
-              if (candidate.endsWith('.mp3')) {
+              if (candidate.toLowerCase().endsWith('.mp3')) {
                 resolvedFilePath = candidate
-              } else {
+              } else if (!candidate.match(/\.(webp|jpg|jpeg|png)$/i)) {
                 resolvedFilePath = candidate.replace(/\.[^.]+$/, '.mp3')
               }
             }
@@ -321,18 +335,39 @@ export function registerYtDlpHandlers(): void {
           let finalMp3 = resolvedFilePath
           if (!finalMp3 || !fs.existsSync(finalMp3)) {
             try {
-              const files = fs.readdirSync(outDir)
-                .filter((f) => f.endsWith('.mp3'))
-                .map((f) => ({
-                  path: path.join(outDir, f),
-                  time: fs.statSync(path.join(outDir, f)).mtimeMs,
-                  size: fs.statSync(path.join(outDir, f)).size,
-                }))
-                .filter((f) => f.size > 50000)
-                .sort((a, b) => b.time - a.time)
+              const allMp3s = fs.readdirSync(outDir)
+                .filter((f) => f.toLowerCase().endsWith('.mp3'))
+                .map((f) => {
+                  const p = path.join(outDir, f)
+                  try {
+                    const st = fs.statSync(p)
+                    return { path: p, name: f, time: st.mtimeMs, size: st.size }
+                  } catch {
+                    return null
+                  }
+                })
+                .filter((f): f is NonNullable<typeof f> => f !== null && f.size > 50000)
 
-              if (files.length > 0 && Date.now() - files[0].time < 60000) {
-                finalMp3 = files[0].path
+              // If title was provided, try matching filename with title tokens
+              if (title) {
+                const cleanTitleWords = title.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w) => w.length > 2)
+                const titleMatch = allMp3s.find((f) => {
+                  const fnLower = f.name.toLowerCase()
+                  return cleanTitleWords.length > 0 && cleanTitleWords.filter((w) => fnLower.includes(w)).length >= Math.min(2, cleanTitleWords.length)
+                })
+                if (titleMatch) {
+                  finalMp3 = titleMatch.path
+                }
+              }
+
+              // Fallback: take the most recent MP3 modified in the last 2 minutes
+              if (!finalMp3) {
+                const recent = allMp3s
+                  .filter((f) => Date.now() - f.time < 120000)
+                  .sort((a, b) => b.time - a.time)
+                if (recent.length > 0) {
+                  finalMp3 = recent[0].path
+                }
               }
             } catch {}
           }
@@ -533,4 +568,39 @@ export function registerYtDlpHandlers(): void {
       })
     })
   })
+
+  // ── 6. Sync entire folder (ensures all downloaded MP3s in directory are indexed) ──
+  ipcMain.handle('ytdlp:sync-folder', async (_event, folderPath?: string) => {
+    let outDir = folderPath
+    if (!outDir || !fs.existsSync(outDir)) {
+      try {
+        outDir = app.getPath('music')
+      } catch {
+        outDir = path.join(app.getPath('userData'), 'downloads')
+      }
+    }
+    if (!fs.existsSync(outDir)) return { synced: 0 }
+
+    try {
+      const files = fs.readdirSync(outDir)
+        .filter((f) => f.toLowerCase().endsWith('.mp3'))
+        .map((f) => path.join(outDir!, f))
+
+      let count = 0
+      for (const filePath of files) {
+        try {
+          const res = await scanAndIndexFile(filePath)
+          if (res) count++
+        } catch (e) {
+          console.error('[ytdlp:sync-folder] Failed to index file:', filePath, e)
+        }
+      }
+      console.log(`[ytdlp:sync-folder] Successfully checked/synced ${count} tracks from ${outDir}`)
+      return { synced: count }
+    } catch (err: any) {
+      console.error('[ytdlp:sync-folder] Error:', err)
+      return { synced: 0, error: err.message }
+    }
+  })
 }
+

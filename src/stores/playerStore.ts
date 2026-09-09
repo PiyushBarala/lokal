@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Track } from '../types'
 import type { RepeatMode } from '../types'
 import { extractDominantColor } from '../utils/colorExtractor'
+import { useLibraryStore } from './libraryStore'
 
 interface PlayerState {
   currentTrack: Track | null
@@ -138,7 +139,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   play: () => set({ isPlaying: true }),
 
   next: () => {
-    const { queue, queueIndex, shuffle, repeat } = get()
+    const { queue, queueIndex, shuffle, repeat, currentTrack } = get()
     if (queue.length === 0) return
     let nextIdx: number
     if (shuffle) {
@@ -148,6 +149,62 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     } else if (repeat === 'all') {
       nextIdx = 0
     } else {
+      // ── Spotify Smart Autoplay: Keep music going seamlessly ──
+      const allTracks = useLibraryStore.getState().tracks
+      if (allTracks.length > 0 && currentTrack) {
+        const queuePaths = new Set(queue.map((t) => t.filePath.toLowerCase()))
+        // 1. Same artist tracks not in queue
+        let candidates = allTracks.filter(
+          (t) =>
+            t.artist &&
+            currentTrack.artist &&
+            t.artist.toLowerCase() === currentTrack.artist.toLowerCase() &&
+            !queuePaths.has(t.filePath.toLowerCase())
+        )
+        // 2. Same album tracks if needed
+        if (candidates.length < 3 && currentTrack.album && currentTrack.album !== 'Unknown Album') {
+          const albumTracks = allTracks.filter(
+            (t) =>
+              t.album === currentTrack.album &&
+              !queuePaths.has(t.filePath.toLowerCase()) &&
+              !candidates.some((c) => c.filePath === t.filePath)
+          )
+          candidates.push(...albumTracks)
+        }
+        // 3. Complementary random tracks from library
+        if (candidates.length < 5) {
+          const remainder = allTracks
+            .filter((t) => !queuePaths.has(t.filePath.toLowerCase()) && !candidates.some((c) => c.filePath === t.filePath))
+            .sort(() => Math.random() - 0.5)
+          candidates.push(...remainder.slice(0, 5 - candidates.length))
+        }
+
+        if (candidates.length > 0) {
+          const autoplayTrack = candidates[0]
+          const newQueue = [...queue, ...candidates]
+          const newIndex = queue.length
+          const nextState = {
+            queue: newQueue,
+            queueIndex: newIndex,
+            currentTrack: autoplayTrack,
+            isPlaying: true,
+            seekPosition: 0,
+          }
+          set(nextState)
+          persistPlayerSession({ ...get(), ...nextState })
+          if (autoplayTrack.id) window.lokal.db.recordPlay(autoplayTrack.id).catch(() => {})
+          extractDominantColor(autoplayTrack.artworkPath, autoplayTrack.title).then((color) => {
+            set({ dominantColor: color })
+          })
+          window.dispatchEvent(
+            new CustomEvent('lokal:toast', {
+              detail: `Autoplay: Playing similar songs like "${autoplayTrack.title}"`,
+            })
+          )
+          return
+        }
+      }
+
       set({ isPlaying: false })
       return
     }

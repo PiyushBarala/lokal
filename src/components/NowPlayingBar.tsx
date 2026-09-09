@@ -201,7 +201,7 @@ export function NowPlayingBar(): React.JSX.Element {
       {/* ── Track info ── */}
       <div
         onContextMenu={(e) => currentTrack && openContextMenu(e, currentTrack)}
-        className="flex items-center gap-3 w-[290px] min-w-0"
+        className="flex items-center gap-3 w-[280px] max-w-[28vw] min-w-0 flex-shrink-0"
       >
         <div
           onClick={() => toggleRightPanel('nowPlaying')}
@@ -220,9 +220,9 @@ export function NowPlayingBar(): React.JSX.Element {
           </div>
         </div>
         {currentTrack ? (
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-white truncate">{currentTrack.title}</p>
-            <p className="text-xs text-[#b3b3b3] truncate">{currentTrack.artist}</p>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <p className="text-sm font-semibold text-white truncate max-w-[180px] sm:max-w-[210px]">{currentTrack.title}</p>
+            <p className="text-xs text-[#b3b3b3] truncate max-w-[180px] sm:max-w-[210px]">{currentTrack.artist}</p>
           </div>
         ) : (
           <p className="text-sm text-[#535353]">Nothing playing</p>

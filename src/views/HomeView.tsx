@@ -207,14 +207,46 @@ export function HomeView(): React.JSX.Element {
     return tracks.slice(0, 8)
   }, [tracks])
 
-  // "Made For You · Daily Artist Mix" based on the user's top artist
-  const topArtist = artistCounts[0]?.[0]
-  const artistMix = useMemo(() => {
-    if (!topArtist || tracks.length === 0) return []
-    const primary = tracks.filter((t) => t.artist === topArtist)
-    const secondary = tracks.filter((t) => t.artist !== topArtist)
-    return [...primary, ...secondary.slice(0, 6)]
-  }, [topArtist, tracks])
+  // "Made For You · Daily Mixes" (Spotify-style Daily Mix 1 & 2)
+  const topArtist1 = artistCounts[0]?.[0]
+  const topArtist2 = artistCounts[1]?.[0]
+
+  const dailyMix1 = useMemo(() => {
+    if (!topArtist1 || tracks.length === 0) return []
+    const primary = tracks.filter((t) => t.artist === topArtist1)
+    const secondary = tracks.filter((t) => t.artist !== topArtist1)
+    return [...primary, ...secondary.slice(0, 8)]
+  }, [topArtist1, tracks])
+
+  const dailyMix2 = useMemo(() => {
+    if (!topArtist2 || tracks.length === 0) return []
+    const primary = tracks.filter((t) => t.artist === topArtist2)
+    const secondary = tracks.filter((t) => t.artist !== topArtist2 && t.artist !== topArtist1)
+    return [...primary, ...secondary.slice(0, 8)]
+  }, [topArtist2, topArtist1, tracks])
+
+  // "Based on Your Recent Listening"
+  const recentSeedTrack = recent[0]
+  const basedOnRecent = useMemo(() => {
+    if (!recentSeedTrack || tracks.length === 0) return []
+    const sameArtist = tracks.filter(
+      (t) => t.artist === recentSeedTrack.artist && t.id !== recentSeedTrack.id
+    )
+    const otherTracks = tracks.filter(
+      (t) => t.artist !== recentSeedTrack.artist && t.id !== recentSeedTrack.id
+    )
+    return [...sameArtist, ...otherTracks.slice(0, 8)]
+  }, [recentSeedTrack, tracks])
+
+  // "Rediscover · Deep Cuts"
+  const rediscoverGems = useMemo(() => {
+    if (tracks.length === 0) return []
+    const unplayed = tracks.filter((t) => !t.playCount || t.playCount === 0)
+    if (unplayed.length >= 3) {
+      return [...unplayed].slice(0, 10)
+    }
+    return []
+  }, [tracks])
 
   // "Fresh In Your Library · Recently Added" — sorted by dateAdded or id descending
   const recentlyAdded = useMemo(() => {
@@ -358,25 +390,25 @@ export function HomeView(): React.JSX.Element {
                   track={t}
                   onPlay={() => playTrack(t, onRepeat)}
                   isActive={currentTrack?.id === t.id}
-                  badge={t.playCount ? `🔥 ${t.playCount} plays` : (t.liked ? '❤️ Liked' : undefined)}
+                  badge={t.liked ? '❤️ Liked' : '🔥 On Repeat'}
                 />
               ))}
             </div>
           </section>
         )}
 
-        {/* ── Made For You · Daily Artist Mix ────────────────── */}
-        {topArtist && artistMix.length > 0 && (
+        {/* ── Spotify Daily Mix 1 ────────────────────────────── */}
+        {topArtist1 && dailyMix1.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-wider text-accent">Made For You</span>
-                <h2 className="text-xl font-bold text-white">{topArtist} Mix</h2>
-                <p className="text-xs text-[#b3b3b3] mt-0.5">Featuring {topArtist} and similar tracks from your collection</p>
+                <h2 className="text-xl font-bold text-white">Daily Mix 1</h2>
+                <p className="text-xs text-[#b3b3b3] mt-0.5">Featuring {topArtist1} and similar sounds from your collection</p>
               </div>
               <button
-                onClick={() => playTrack(artistMix[0], artistMix)}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-accent text-black text-xs font-bold hover:scale-105 transition-transform shadow-md"
+                onClick={() => playTrack(dailyMix1[0], dailyMix1)}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-accent text-black text-xs font-bold hover:scale-105 transition-transform shadow-md cursor-pointer"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                   <path d="M8 5v14l11-7z"/>
@@ -385,13 +417,102 @@ export function HomeView(): React.JSX.Element {
               </button>
             </div>
             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
-              {artistMix.map((t) => (
+              {dailyMix1.map((t) => (
                 <QuickPickCard
                   key={t.id}
                   track={t}
-                  onPlay={() => playTrack(t, artistMix)}
+                  onPlay={() => playTrack(t, dailyMix1)}
                   isActive={currentTrack?.id === t.id}
-                  badge={t.artist === topArtist ? 'Artist Mix' : undefined}
+                  badge={t.artist === topArtist1 ? 'Daily Mix' : undefined}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Spotify Daily Mix 2 ────────────────────────────── */}
+        {topArtist2 && dailyMix2.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-accent">Made For You</span>
+                <h2 className="text-xl font-bold text-white">Daily Mix 2</h2>
+                <p className="text-xs text-[#b3b3b3] mt-0.5">Featuring {topArtist2} and related favorites</p>
+              </div>
+              <button
+                onClick={() => playTrack(dailyMix2[0], dailyMix2)}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-bold hover:scale-105 transition-transform shadow-md cursor-pointer"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                Play Mix
+              </button>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
+              {dailyMix2.map((t) => (
+                <QuickPickCard
+                  key={t.id}
+                  track={t}
+                  onPlay={() => playTrack(t, dailyMix2)}
+                  isActive={currentTrack?.id === t.id}
+                  badge={t.artist === topArtist2 ? 'Daily Mix 2' : undefined}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Based on Recent Listening ─────────────────────── */}
+        {recentSeedTrack && basedOnRecent.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-accent">Recommended</span>
+                <h2 className="text-xl font-bold text-white">Based on "{recentSeedTrack.title}"</h2>
+                <p className="text-xs text-[#b3b3b3] mt-0.5">Because you recently listened to {recentSeedTrack.artist}</p>
+              </div>
+              <button
+                onClick={() => playTrack(basedOnRecent[0], basedOnRecent)}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold hover:scale-105 transition-transform shadow-sm cursor-pointer"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                Play All
+              </button>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
+              {basedOnRecent.map((t) => (
+                <QuickPickCard
+                  key={t.id}
+                  track={t}
+                  onPlay={() => playTrack(t, basedOnRecent)}
+                  isActive={currentTrack?.id === t.id}
+                  badge={t.artist === recentSeedTrack.artist ? 'More from artist' : 'Similar vibe'}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Rediscover · Deep Cuts ────────────────────────── */}
+        {rediscoverGems.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-white">Rediscover</h2>
+                <p className="text-xs text-[#b3b3b3] mt-0.5">Gems in your library waiting to be played again</p>
+              </div>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
+              {rediscoverGems.map((t) => (
+                <QuickPickCard
+                  key={t.id}
+                  track={t}
+                  onPlay={() => playTrack(t, rediscoverGems)}
+                  isActive={currentTrack?.id === t.id}
+                  badge="✨ Deep Cut"
                 />
               ))}
             </div>

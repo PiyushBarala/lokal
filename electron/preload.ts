@@ -118,11 +118,12 @@ const api = {
       ipcRenderer.invoke('ytdlp:search', query, offset, limit),
     getRelated: (videoId: string, offset?: number, limit?: number) =>
       ipcRenderer.invoke('ytdlp:getRelated', videoId, offset, limit),
-    download: (opts: { videoId: string; targetFolder?: string }) =>
+    download: (opts: { videoId: string; title?: string; targetFolder?: string }) =>
       ipcRenderer.invoke('ytdlp:download', opts),
     cancel: (videoId: string) => ipcRenderer.invoke('ytdlp:cancel', videoId),
     getDefaultFolder: () => ipcRenderer.invoke('ytdlp:get-default-folder'),
     pickFolder: () => ipcRenderer.invoke('ytdlp:pick-folder'),
+    syncFolder: (folderPath?: string) => ipcRenderer.invoke('ytdlp:sync-folder', folderPath),
     onProgress: (cb: (progress: {
       videoId: string
       percent: number

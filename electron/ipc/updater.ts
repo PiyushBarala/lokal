@@ -1,5 +1,6 @@
-import { app, ipcMain, BrowserWindow } from 'electron'
+import { app, ipcMain, BrowserWindow, shell } from 'electron'
 import { autoUpdater, UpdateInfo } from 'electron-updater'
+import https from 'node:https'
 
 let mainWindowRef: BrowserWindow | null = null
 
@@ -21,6 +22,7 @@ export interface UpdateStatusData {
   transferred?: number
   total?: number
   releaseNotes?: string
+  downloadUrl?: string
   error?: string
   message?: string
 }
@@ -37,13 +39,112 @@ function sendStatus(data: UpdateStatusData) {
   }
 }
 
+function compareVersions(v1: string, v2: string): number {
+  const p1 = v1.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0)
+  const p2 = v2.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const num1 = p1[i] || 0
+    const num2 = p2[i] || 0
+    if (num1 > num2) return 1
+    if (num1 < num2) return -1
+  }
+  return 0
+}
+
+async function checkGitHubReleasesDirectly(): Promise<void> {
+  return new Promise((resolve) => {
+    const req = https.get(
+      'https://api.github.com/repos/PiyushBarala/lokal/releases',
+      {
+        headers: {
+          'User-Agent': 'Lokal-Music-Player/' + app.getVersion(),
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      },
+      (res) => {
+        let rawData = ''
+        res.on('data', (chunk) => {
+          rawData += chunk
+        })
+        res.on('end', () => {
+          try {
+            if (res.statusCode === 200) {
+              const releases = JSON.parse(rawData)
+              if (Array.isArray(releases) && releases.length > 0) {
+                const latest = releases[0]
+                const remoteTag = latest.tag_name || ''
+                const remoteVer = remoteTag.replace(/^v/, '')
+                const currentVer = app.getVersion()
+
+                if (compareVersions(remoteVer, currentVer) > 0) {
+                  const exeAsset = latest.assets?.find((a: any) => a.name?.endsWith('.exe'))
+                  sendStatus({
+                    type: 'available',
+                    currentVersion: currentVer,
+                    version: remoteVer,
+                    releaseNotes: latest.body || undefined,
+                    downloadUrl: exeAsset?.browser_download_url || latest.html_url,
+                    message: `New version ${remoteVer} available on GitHub.`,
+                  })
+                  resolve()
+                  return
+                } else {
+                  sendStatus({
+                    type: 'not-available',
+                    currentVersion: currentVer,
+                    version: currentVer,
+                    message: `Lokal is up to date (v${currentVer}).`,
+                  })
+                  resolve()
+                  return
+                }
+              }
+            }
+          } catch (e) {
+            console.error('[Updater] Fallback JSON parse error:', e)
+          }
+
+          sendStatus({
+            type: 'not-available',
+            currentVersion: app.getVersion(),
+            version: app.getVersion(),
+            message: `Lokal is up to date (v${app.getVersion()}).`,
+          })
+          resolve()
+        })
+      }
+    )
+
+    req.on('error', (err) => {
+      console.warn('[Updater] Direct GitHub check error:', err)
+      sendStatus({
+        type: 'error',
+        currentVersion: app.getVersion(),
+        error: err.message,
+        message: 'Could not connect to GitHub. Check internet connection.',
+      })
+      resolve()
+    })
+
+    req.setTimeout(8000, () => {
+      req.destroy()
+      sendStatus({
+        type: 'error',
+        currentVersion: app.getVersion(),
+        message: 'Connection timed out checking for updates.',
+      })
+      resolve()
+    })
+  })
+}
+
 export function registerUpdaterHandlers(win: BrowserWindow | null): void {
   mainWindowRef = win
 
   // Configure autoUpdater
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
-  autoUpdater.allowPrerelease = false
+  autoUpdater.allowPrerelease = true
 
   // Event: checking for update
   autoUpdater.on('checking-for-update', () => {
@@ -110,8 +211,20 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
   })
 
   // Event: error
-  autoUpdater.on('error', (err: Error) => {
-    console.error('[Updater] Error:', err)
+  autoUpdater.on('error', async (err: Error) => {
+    console.error('[Updater] autoUpdater error:', err)
+    const errStr = String(err?.message || err)
+    if (
+      errStr.includes('404') ||
+      errStr.includes('latest.yml') ||
+      errStr.includes('Cannot find') ||
+      errStr.includes('HttpError')
+    ) {
+      console.log('[Updater] latest.yml missing or 404, falling back to direct GitHub releases API...')
+      await checkGitHubReleasesDirectly()
+      return
+    }
+
     sendStatus({
       type: 'error',
       currentVersion: app.getVersion(),
@@ -148,10 +261,26 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
     }
 
     try {
+      sendStatus({
+        type: 'checking',
+        currentVersion: app.getVersion(),
+        message: 'Checking for updates...',
+      })
       await autoUpdater.checkForUpdates()
       return { success: true }
     } catch (err: any) {
       console.error('[Updater] checkForUpdates failed:', err)
+      const errStr = String(err?.message || err)
+      if (
+        errStr.includes('404') ||
+        errStr.includes('latest.yml') ||
+        errStr.includes('Cannot find') ||
+        errStr.includes('HttpError')
+      ) {
+        console.log('[Updater] Falling back to direct GitHub check on check error...')
+        await checkGitHubReleasesDirectly()
+        return { success: true }
+      }
       sendStatus({
         type: 'error',
         currentVersion: app.getVersion(),
@@ -180,8 +309,12 @@ export async function checkForUpdatesQuietly(): Promise<void> {
   if (app.isPackaged) {
     try {
       await autoUpdater.checkForUpdates()
-    } catch (e) {
+    } catch (e: any) {
       console.warn('[Updater] Background update check:', e)
+      const errStr = String(e?.message || e)
+      if (errStr.includes('404') || errStr.includes('latest.yml')) {
+        await checkGitHubReleasesDirectly()
+      }
     }
   }
 }

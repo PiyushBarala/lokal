@@ -88,10 +88,11 @@ declare global {
       ytdlp: {
         search: (query: string, offset?: number, limit?: number) => Promise<YtSearchResult[]>
         getRelated: (videoId: string, offset?: number, limit?: number) => Promise<YtSearchResult[]>
-        download: (opts: { videoId: string; targetFolder?: string }) => Promise<{ success: boolean; filePath?: string; error?: string }>
+        download: (opts: { videoId: string; title?: string; targetFolder?: string }) => Promise<{ success: boolean; filePath?: string; error?: string }>
         cancel: (videoId: string) => Promise<boolean>
         getDefaultFolder: () => Promise<string>
         pickFolder: () => Promise<string | null>
+        syncFolder: (folderPath?: string) => Promise<{ synced: number; error?: string }>
         onProgress: (cb: (progress: DownloadProgress) => void) => () => void
       }
       updater: {

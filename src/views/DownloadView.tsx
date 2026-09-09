@@ -334,6 +334,7 @@ export function DownloadView(): React.JSX.Element {
     try {
       const res = await window.lokal.ytdlp.download({
         videoId: item.id,
+        title: item.title,
         targetFolder: targetFolder || undefined,
       })
 
@@ -463,9 +464,17 @@ export function DownloadView(): React.JSX.Element {
     setIsDownloadingAll(false)
     setDownloadAllProgress(null)
 
+    // Ensure 100% of downloaded files in the target folder are indexed in SQLite
+    try {
+      await window.lokal.ytdlp.syncFolder(targetFolder || undefined)
+    } catch (e) {
+      console.error('[DownloadView] Sync folder error:', e)
+    }
+
+    await loadLibrary()
+
     // After all downloads finish, ensure all downloaded tracks are in the "Downloads" playlist
     if (downloadedVideoIds.length > 0) {
-      await loadLibrary()
       for (const vid of downloadedVideoIds) {
         await ensureAddedToDownloadsPlaylist(undefined, vid)
       }

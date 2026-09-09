@@ -548,14 +548,14 @@ export function NowPlayingExpandedView(): React.JSX.Element {
 
         {/* ── Bottom-Left Song Title & Artist (Spotify Idle Mode) ── */}
         <div
-          className={`absolute bottom-10 sm:bottom-12 left-6 sm:left-10 max-w-[calc(100%-48px)] sm:max-w-[65%] transition-all duration-700 pointer-events-none z-10 ${
+          className={`absolute bottom-10 sm:bottom-12 left-6 sm:left-10 max-w-[calc(100%-48px)] sm:max-w-[420px] transition-all duration-700 pointer-events-none z-10 ${
             isIdle ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
           }`}
         >
-          <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-extrabold text-white tracking-tight drop-shadow-lg line-clamp-2">
+          <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-white tracking-tight drop-shadow-lg truncate max-w-[380px]">
             {currentTrack.title}
           </h1>
-          <p className="text-xs sm:text-sm md:text-base font-medium text-white/80 mt-1 drop-shadow truncate">
+          <p className="text-xs sm:text-sm font-medium text-white/80 mt-1 drop-shadow truncate max-w-[340px]">
             {currentTrack.artist}
           </p>
         </div>
@@ -659,12 +659,12 @@ export function NowPlayingExpandedView(): React.JSX.Element {
         {/* Track Title + Controls Row */}
         <div className="flex items-center justify-between">
           {/* Left: Track title & like */}
-          <div className="flex items-center gap-4 min-w-0 w-1/4">
-            <div className="min-w-0">
-              <h2 className="text-xl font-bold text-white tracking-tight truncate">
+          <div className="flex items-center gap-4 min-w-0 max-w-[280px] w-1/4 flex-shrink-0">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight truncate max-w-[200px]">
                 {currentTrack.title}
               </h2>
-              <p className="text-sm text-[#b3b3b3] truncate">{currentTrack.artist}</p>
+              <p className="text-xs sm:text-sm text-[#b3b3b3] truncate max-w-[200px]">{currentTrack.artist}</p>
             </div>
             <button
               onClick={handleLike}

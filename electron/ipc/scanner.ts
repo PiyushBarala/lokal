@@ -351,19 +351,35 @@ export async function scanAndIndexFile(
   filePath: string,
   sourceVideoId?: string | null
 ): Promise<ScannedTrack | null> {
-  try {
-    const track = await extractMetadata(filePath)
-    if (sourceVideoId) {
-      track.sourceVideoId = sourceVideoId
+  // Retry up to 3 times with backoff in case Windows file handle (e.g. from ffmpeg) is still releasing
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      if (!fs.existsSync(filePath)) {
+        if (attempt < 3) {
+          await new Promise((r) => setTimeout(r, 250 * attempt))
+          continue
+        }
+        return null
+      }
+      const track = await extractMetadata(filePath)
+      if (sourceVideoId) {
+        track.sourceVideoId = sourceVideoId
+      }
+      writeTracksToDb([track as (ScannedTrack & { artworkData: Buffer | null })])
+      console.log(`[Scanner] Indexed single file: ${track.artist} – ${track.title}${sourceVideoId ? ` (source: ${sourceVideoId})` : ''}`)
+      return {
+        ...track,
+        artworkData: null
+      }
+    } catch (err) {
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 250 * attempt))
+        continue
+      }
+      console.error(`[Scanner] Failed to index single file after 3 attempts: ${filePath}`, err)
+      return null
     }
-    writeTracksToDb([track as (ScannedTrack & { artworkData: Buffer | null })])
-    console.log(`[Scanner] Indexed single file: ${track.artist} – ${track.title}${sourceVideoId ? ` (source: ${sourceVideoId})` : ''}`)
-    return {
-      ...track,
-      artworkData: null
-    }
-  } catch (err) {
-    console.error(`[Scanner] Failed to index single file: ${filePath}`, err)
-    return null
   }
+  return null
 }
+
