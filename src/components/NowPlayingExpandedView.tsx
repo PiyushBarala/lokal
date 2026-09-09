@@ -47,6 +47,11 @@ export function NowPlayingExpandedView(): React.JSX.Element {
     opacity: 0,
   })
   const [isArtHovered, setIsArtHovered] = useState(false)
+  const [isWideThumbnail, setIsWideThumbnail] = useState(false)
+
+  useEffect(() => {
+    setIsWideThumbnail(false)
+  }, [currentTrack?.filePath, currentTrack?.id])
 
   // ── Option 11: Volume HUD State ─────────────────────────────────
   const [volumeHUD, setVolumeHUD] = useState<{
@@ -332,25 +337,26 @@ export function NowPlayingExpandedView(): React.JSX.Element {
         isIdle ? 'cursor-none' : ''
       }`}
     >
-      {/* ── Dynamic Moving Fluid Gradient Mesh Backdrop ──────────── */}
+      {/* ── Blurred Living Thumbnail & Dynamic Moving Mesh Backdrop ──── */}
       <div className="absolute inset-0 bg-[#080808] -z-20 overflow-hidden pointer-events-none select-none">
-        {/* Subtle blurred artwork texture base for realistic character */}
+        {/* Living, breathing blurred thumbnail */}
         {artworkUrl && (
-          <div className="absolute -inset-24 overflow-hidden opacity-25">
+          <div className="absolute -inset-20 overflow-hidden opacity-75">
             <img
               src={artworkUrl}
               alt=""
-              className="w-full h-full object-cover select-none pointer-events-none"
+              className="w-full h-full object-cover select-none pointer-events-none animate-alive-thumbnail"
               style={{
-                filter: 'blur(80px) saturate(1.4)',
+                filter: 'blur(42px) saturate(1.5) brightness(0.6)',
+                animationPlayState: isPlaying ? 'running' : 'paused',
               }}
             />
           </div>
         )}
 
-        {/* Fluid Swirling Mesh Gradient Blobs that move dynamically when playing */}
+        {/* Fluid Swirling Mesh Gradient Accents layered over blurred thumbnail */}
         <div
-          className="absolute -inset-28 overflow-hidden pointer-events-none"
+          className="absolute -inset-28 overflow-hidden pointer-events-none mix-blend-screen opacity-70"
           style={{
             filter: 'blur(88px)',
           }}
@@ -359,7 +365,7 @@ export function NowPlayingExpandedView(): React.JSX.Element {
           <div
             className="absolute top-[6%] left-[10%] w-[68vw] h-[68vh] rounded-full animate-fluid-blob-1 transition-colors duration-1000"
             style={{
-              background: `radial-gradient(circle, ${palette.primary}f0 0%, ${palette.primary}00 70%)`,
+              background: `radial-gradient(circle, ${palette.primary}e0 0%, ${palette.primary}00 70%)`,
               animationPlayState: isPlaying ? 'running' : 'paused',
             }}
           />
@@ -368,7 +374,7 @@ export function NowPlayingExpandedView(): React.JSX.Element {
           <div
             className="absolute bottom-[6%] right-[6%] w-[64vw] h-[64vh] rounded-full animate-fluid-blob-2 transition-colors duration-1000"
             style={{
-              background: `radial-gradient(circle, ${palette.secondary}e0 0%, ${palette.secondary}00 70%)`,
+              background: `radial-gradient(circle, ${palette.secondary}d0 0%, ${palette.secondary}00 70%)`,
               animationPlayState: isPlaying ? 'running' : 'paused',
             }}
           />
@@ -377,7 +383,7 @@ export function NowPlayingExpandedView(): React.JSX.Element {
           <div
             className="absolute top-[36%] right-[26%] w-[50vw] h-[50vh] rounded-full animate-fluid-blob-3 transition-colors duration-1000"
             style={{
-              background: `radial-gradient(circle, ${palette.tertiary}d0 0%, ${palette.tertiary}00 68%)`,
+              background: `radial-gradient(circle, ${palette.tertiary}c0 0%, ${palette.tertiary}00 68%)`,
               animationPlayState: isPlaying ? 'running' : 'paused',
             }}
           />
@@ -386,7 +392,7 @@ export function NowPlayingExpandedView(): React.JSX.Element {
           <div
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[72vw] h-[72vh] rounded-full transition-colors duration-1000"
             style={{
-              background: `radial-gradient(circle, ${palette.primary}60 0%, transparent 70%)`,
+              background: `radial-gradient(circle, ${palette.primary}50 0%, transparent 70%)`,
             }}
           />
         </div>
@@ -503,7 +509,11 @@ export function NowPlayingExpandedView(): React.JSX.Element {
           <div
             onMouseMove={handleArtMouseMove}
             onMouseLeave={handleArtMouseLeave}
-            className="relative max-w-[420px] max-h-[420px] w-[28vh] h-[28vh] min-w-[140px] min-h-[140px] sm:w-[32vh] sm:h-[32vh] lg:w-[42vh] lg:h-[42vh] aspect-square rounded-2xl overflow-hidden ring-1 ring-white/15 cursor-pointer select-none"
+            className={`relative rounded-2xl overflow-hidden ring-1 ring-white/15 cursor-pointer select-none transition-all duration-500 ${
+              isWideThumbnail
+                ? 'max-w-[560px] w-[50vh] sm:w-[58vh] max-h-[340px] aspect-video'
+                : 'max-w-[420px] max-h-[420px] w-[28vh] h-[28vh] min-w-[140px] min-h-[140px] sm:w-[32vh] sm:h-[32vh] lg:w-[42vh] lg:h-[42vh] aspect-square'
+            }`}
             style={{
               transform: `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(${
                 isArtHovered ? 1.04 : 1
@@ -521,6 +531,12 @@ export function NowPlayingExpandedView(): React.JSX.Element {
               <img
                 src={artworkUrl}
                 alt={currentTrack.title}
+                onLoad={(e) => {
+                  const img = e.currentTarget
+                  if (img.naturalWidth && img.naturalHeight) {
+                    setIsWideThumbnail(img.naturalWidth / img.naturalHeight > 1.25)
+                  }
+                }}
                 className="w-full h-full object-cover select-none pointer-events-none"
               />
             ) : (
