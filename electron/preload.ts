@@ -155,6 +155,7 @@ const api = {
     getVersion: (): Promise<string> => ipcRenderer.invoke('updater:get-version'),
     getLastStatus: (): Promise<any> => ipcRenderer.invoke('updater:get-last-status'),
     checkForUpdates: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('updater:check'),
+    skipUpdate: (version?: string): Promise<{ success: boolean }> => ipcRenderer.invoke('updater:skip', version),
     downloadUpdate: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('updater:download'),
     openReleasePage: (url?: string): Promise<{ success: boolean }> => ipcRenderer.invoke('updater:open-url', url),
     quitAndInstall: (): Promise<void> => ipcRenderer.invoke('updater:install'),

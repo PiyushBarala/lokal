@@ -24,6 +24,14 @@ export function resetZoom(): void {
   document.documentElement.style.zoom = '1'
 }
 
+function formatBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
 // ── About Modal ───────────────────────────────────────────────────
 function AboutModal({ onClose }: { onClose: () => void }) {
   const [version, setVersion] = useState('1.1.3')
@@ -49,6 +57,27 @@ function AboutModal({ onClose }: { onClose: () => void }) {
       await window.lokal?.updater?.checkForUpdates()
     } catch {
       setIsChecking(false)
+    }
+  }
+
+  const handleStartDownload = async () => {
+    try {
+      await window.lokal?.updater?.downloadUpdate()
+    } catch (e) {
+      console.error('Download error:', e)
+    }
+  }
+
+  const handleSkipUpdate = async (ver?: string) => {
+    try {
+      await window.lokal?.updater?.skipUpdate(ver)
+      setStatus({
+        type: 'idle',
+        currentVersion: version,
+        message: 'Update skipped.',
+      })
+    } catch (e) {
+      console.error('Skip error:', e)
     }
   }
 
@@ -98,54 +127,87 @@ function AboutModal({ onClose }: { onClose: () => void }) {
               <span>Checking for updates...</span>
             </div>
           ) : status?.type === 'downloading' ? (
-            <div className="w-full space-y-1.5 py-0.5">
-              <div className="flex justify-between text-xs text-[#b3b3b3]">
-                <span>Downloading v{status.version}...</span>
-                <span className="font-mono text-white">{status.percent ?? 0}%</span>
+            <div className="w-full space-y-2 py-1">
+              <div className="flex justify-between items-center text-xs">
+                <div className="flex items-center gap-1.5 text-white font-medium">
+                  <div className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  <span>Downloading v{status.version || ''}...</span>
+                </div>
+                <span className="font-mono text-xs font-semibold text-accent">{status.percent ?? 0}%</span>
               </div>
-              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+
+              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-accent transition-all duration-300 rounded-full"
-                  style={{ width: `${status.percent ?? 0}%` }}
+                  className="h-full bg-accent transition-all duration-300 rounded-full shadow-[0_0_8px_rgba(30,215,96,0.6)]"
+                  style={{ width: `${Math.min(100, Math.max(0, status.percent ?? 0))}%` }}
                 />
               </div>
+
+              <div className="flex justify-between text-[11px] text-[#888] font-mono">
+                <span>
+                  {status.transferred && status.total
+                    ? `${formatBytes(status.transferred)} / ${formatBytes(status.total)}`
+                    : status.percent
+                    ? `${status.percent}% completed`
+                    : 'Downloading...'}
+                </span>
+                {status.bytesPerSecond ? <span>{formatBytes(status.bytesPerSecond)}/s</span> : null}
+              </div>
+
+              <p className="text-[10px] text-[#888] leading-tight text-center pt-0.5">
+                Downloading in background. You can close this window and continue listening.
+              </p>
             </div>
           ) : status?.type === 'downloaded' ? (
-            <div className="w-full flex flex-col items-center gap-2 py-0.5">
+            <div className="w-full flex flex-col items-center gap-2.5 py-1">
               <div className="flex items-center gap-1.5 text-xs text-accent font-semibold">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                 </svg>
-                <span>v{status.version} ready to install!</span>
+                <span>v{status.version} downloaded & ready!</span>
               </div>
+              <p className="text-[11px] text-[#b3b3b3]">
+                Restart Lokal now to install the new update.
+              </p>
               <button
                 onClick={handleInstall}
-                className="w-full py-2 rounded-lg bg-accent text-black font-bold text-xs hover:bg-accent/90 transition-all shadow-md active:scale-95"
+                className="w-full py-2.5 rounded-lg bg-accent text-black font-bold text-xs hover:bg-accent/90 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5"
               >
-                Restart & Install Now
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z" />
+                </svg>
+                <span>Restart & Install Now</span>
               </button>
             </div>
           ) : status?.type === 'available' ? (
-            <div className="w-full flex flex-col items-center gap-2 py-0.5">
-              <div className="flex items-center gap-1.5 text-xs text-accent font-semibold">
-                <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
-                <span>v{status.version} is available!</span>
+            <div className="w-full flex flex-col items-center gap-2 py-1">
+              <div className="flex items-center gap-2 text-xs font-semibold text-accent">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+                </span>
+                <span>New version available: v{status.version}</span>
               </div>
-              <button
-                onClick={() => {
-                  if (status.downloadUrl) {
-                    window.lokal?.updater?.openReleasePage?.(status.downloadUrl)
-                  } else {
-                    window.lokal?.updater?.downloadUpdate?.()
-                  }
-                }}
-                className="w-full py-2 rounded-lg bg-accent text-black font-bold text-xs hover:bg-accent/90 transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                  <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
-                </svg>
-                <span>Download v{status.version}</span>
-              </button>
+              <p className="text-[11px] text-[#b3b3b3] leading-normal">
+                An update is ready for Lokal. Download it in the background or skip for now.
+              </p>
+              <div className="flex items-center gap-2 w-full mt-1">
+                <button
+                  onClick={() => handleSkipUpdate(status.version)}
+                  className="flex-1 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-white/90 hover:text-white font-medium text-xs transition-all active:scale-95"
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={handleStartDownload}
+                  className="flex-1 py-2 rounded-lg bg-accent text-black font-bold text-xs hover:bg-accent/90 transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                    <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
+                  </svg>
+                  <span>Download</span>
+                </button>
+              </div>
             </div>
           ) : status?.type === 'not-available' ? (
             <div className="flex items-center justify-between w-full">
@@ -329,7 +391,7 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
             setIsOpen(!isOpen)
             setActiveCategory(null)
           }}
-          className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-sm ${isOpen
+          className={`relative w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-sm ${isOpen
             ? 'bg-[#282828] text-white ring-1 ring-white/20'
             : 'bg-[#121212] hover:bg-[#1f1f1f] text-[#b3b3b3] hover:text-white'
             }`}
@@ -340,6 +402,15 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
             <circle cx="12" cy="12" r="2" />
             <circle cx="19" cy="12" r="2" />
           </svg>
+          {updateStatus?.type === 'available' && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent animate-pulse" />
+          )}
+          {updateStatus?.type === 'downloading' && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent animate-ping" />
+          )}
+          {updateStatus?.type === 'downloaded' && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent shadow-[0_0_6px_rgba(30,215,96,0.8)]" />
+          )}
         </button>
 
         {/* Root Menu Dropdown */}
@@ -617,11 +688,19 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
                     className="px-3 py-1.5 flex items-center justify-between hover:bg-[#333333] hover:text-white cursor-pointer"
                   >
                     <span>Check for Updates...</span>
-                    {updateStatus?.type === 'downloaded' && (
-                      <span className="text-[10px] text-accent font-semibold px-1 py-0.5 bg-accent/15 rounded">
+                    {updateStatus?.type === 'downloaded' ? (
+                      <span className="text-[10px] text-accent font-semibold px-1.5 py-0.5 bg-accent/20 rounded">
                         Ready
                       </span>
-                    )}
+                    ) : updateStatus?.type === 'downloading' ? (
+                      <span className="text-[10px] text-accent font-semibold px-1.5 py-0.5 bg-accent/20 rounded">
+                        {updateStatus.percent ?? 0}%
+                      </span>
+                    ) : updateStatus?.type === 'available' ? (
+                      <span className="text-[10px] text-accent font-semibold px-1.5 py-0.5 bg-accent/20 rounded">
+                        New
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               )}

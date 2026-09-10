@@ -103,6 +103,7 @@ export interface UpdateStatus {
   total?: number
   releaseNotes?: string
   downloadUrl?: string
+  releasePageUrl?: string
   error?: string
   message?: string
 }

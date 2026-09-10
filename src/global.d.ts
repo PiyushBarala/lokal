@@ -99,6 +99,7 @@ declare global {
         getVersion: () => Promise<string>
         getLastStatus: () => Promise<UpdateStatus>
         checkForUpdates: () => Promise<{ success: boolean; error?: string }>
+        skipUpdate: (version?: string) => Promise<{ success: boolean }>
         downloadUpdate: () => Promise<{ success: boolean; error?: string }>
         openReleasePage: (url?: string) => Promise<{ success: boolean }>
         quitAndInstall: () => Promise<void>
