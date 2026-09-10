@@ -26,7 +26,7 @@ export function resetZoom(): void {
 
 // ── About Modal ───────────────────────────────────────────────────
 function AboutModal({ onClose }: { onClose: () => void }) {
-  const [version, setVersion] = useState('1.1.1')
+  const [version, setVersion] = useState('1.1.2')
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [isChecking, setIsChecking] = useState(false)
 
