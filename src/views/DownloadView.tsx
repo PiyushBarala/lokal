@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useLibraryStore } from '../stores/libraryStore'
 import { usePlayerStore } from '../stores/playerStore'
-import { useDownloadStore } from '../stores/downloadStore'
 import type { YtSearchResult, DownloadProgress, DownloadItem, Track } from '../types'
 
 function PreviewThumbnail({
@@ -84,6 +83,8 @@ function PreviewThumbnail({
   )
 }
 
+import { useDownloadStore } from '../stores/downloadStore'
+
 export function DownloadView(): React.JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams()
   const seedVideoId = searchParams.get('seedVideoId')
@@ -98,6 +99,7 @@ export function DownloadView(): React.JSX.Element {
     setQuery,
     results,
     setResults,
+    appendResults,
     hasSearched,
     setHasSearched,
     isSearching,
@@ -112,19 +114,20 @@ export function DownloadView(): React.JSX.Element {
     setSearchError,
     targetFolder,
     setTargetFolder,
+    downloads,
+    addDownload,
+    updateDownload,
+    clearFinishedDownloads,
     downloadSimultaneously,
     setDownloadSimultaneously,
     isDownloadingAll,
     setIsDownloadingAll,
     downloadAllProgress,
     setDownloadAllProgress,
-    downloads,
-    setDownloads,
-    activeSeedVideoId,
-    setActiveSeed,
   } = useDownloadStore()
 
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const lastSeedIdRef = useRef<string | null>(null)
 
   // Automatically add downloaded tracks into the "Downloads" playlist
   const ensureAddedToDownloadsPlaylist = useCallback(async (filePath?: string, videoId?: string) => {
@@ -156,22 +159,25 @@ export function DownloadView(): React.JSX.Element {
 
   // Initialize download folder (prioritizing user's scanFolder, else default music folder)
   useEffect(() => {
-    if (scanFolder) {
-      setTargetFolder(scanFolder)
-    } else {
-      window.lokal.ytdlp.getDefaultFolder().then((folder) => {
-        if (folder) setTargetFolder(folder)
-      }).catch(console.error)
+    if (!targetFolder) {
+      if (scanFolder) {
+        setTargetFolder(scanFolder)
+      } else {
+        window.lokal.ytdlp.getDefaultFolder().then((folder) => {
+          if (folder) setTargetFolder(folder)
+        }).catch(console.error)
+      }
     }
-  }, [scanFolder])
+  }, [scanFolder, targetFolder, setTargetFolder])
 
   // Load related tracks when seedVideoId changes
   useEffect(() => {
     if (seedVideoId) {
-      if (activeSeedVideoId === seedVideoId && results.length > 0) {
+      // If we already have results loaded for this seedVideoId, retain them!
+      if (lastSeedIdRef.current === seedVideoId && results.length > 0) {
         return
       }
-      setActiveSeed(seedVideoId, seedTitle)
+      lastSeedIdRef.current = seedVideoId
       setIsSearching(true)
       setHasSearched(true)
       setHasMore(true)
@@ -189,44 +195,13 @@ export function DownloadView(): React.JSX.Element {
       }).finally(() => {
         setIsSearching(false)
       })
+    } else {
+      lastSeedIdRef.current = null
     }
-  }, [seedVideoId, seedTitle, activeSeedVideoId, results.length])
+  }, [seedVideoId, results.length, setIsSearching, setHasSearched, setHasMore, setSearchError, setSearchOffset, setResults])
 
-  // Listen for real-time progress events from main process
-  useEffect(() => {
-    const unsub = window.lokal.ytdlp.onProgress((progress: DownloadProgress) => {
-      setDownloads((prev) => {
-        const next = new Map(prev)
-        const existing = next.get(progress.videoId)
-        if (existing) {
-          next.set(progress.videoId, {
-            ...existing,
-            percent: progress.percent,
-            speed: progress.speed,
-            eta: progress.eta,
-            status: progress.status,
-            filePath: progress.filePath || existing.filePath,
-            error: progress.error,
-          })
-        }
-        return next
-      })
+  // Download progress is managed globally via initGlobalDownloadListener() in downloadStore.ts
 
-      // When a download finishes, auto-refresh library and add to "Downloads" playlist
-      if (progress.status === 'completed') {
-        loadLibrary().then(async () => {
-          window.dispatchEvent(
-            new CustomEvent('lokal:toast', {
-              detail: 'Track downloaded and added to Downloads playlist',
-            })
-          )
-          await ensureAddedToDownloadsPlaylist(progress.filePath, progress.videoId)
-        }).catch(console.error)
-      }
-    })
-
-    return unsub
-  }, [loadLibrary, ensureAddedToDownloadsPlaylist])
 
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
@@ -291,12 +266,12 @@ export function DownloadView(): React.JSX.Element {
         if (!nextItems || nextItems.length === 0) {
           setHasMore(false)
         } else {
-          setResults((prev) => {
+          setResults((prev: YtSearchResult[]) => {
             const seen = new Set(prev.map((p) => p.id))
             const filtered = nextItems.filter((n) => !seen.has(n.id))
             return [...prev, ...filtered]
           })
-          setSearchOffset((prev) => prev + nextItems.length)
+          setSearchOffset((prev: number) => prev + nextItems.length)
           if (nextItems.length < 20) {
             setHasMore(false)
           }
@@ -308,12 +283,12 @@ export function DownloadView(): React.JSX.Element {
         if (!nextItems || nextItems.length === 0) {
           setHasMore(false)
         } else {
-          setResults((prev) => {
+          setResults((prev: YtSearchResult[]) => {
             const seen = new Set(prev.map((p) => p.id))
             const filtered = nextItems.filter((n) => !seen.has(n.id))
             return [...prev, ...filtered]
           })
-          setSearchOffset((prev) => prev + nextItems.length)
+          setSearchOffset((prev: number) => prev + nextItems.length)
           if (nextItems.length < 8) {
             setHasMore(false)
           }
@@ -335,7 +310,7 @@ export function DownloadView(): React.JSX.Element {
   }
 
   const startDownload = useCallback(async (item: YtSearchResult): Promise<{ success: boolean; filePath?: string }> => {
-    // Add to downloads map
+    // Add to downloads map in store
     const newItem: DownloadItem = {
       ...item,
       percent: 0,
@@ -343,7 +318,7 @@ export function DownloadView(): React.JSX.Element {
       eta: '',
       status: 'downloading',
     }
-    setDownloads((prev) => new Map(prev).set(item.id, newItem))
+    addDownload(newItem)
 
     try {
       const res = await window.lokal.ytdlp.download({
@@ -353,40 +328,19 @@ export function DownloadView(): React.JSX.Element {
       })
 
       if (!res.success && res.error) {
-        setDownloads((prev) => {
-          const next = new Map(prev)
-          const curr = next.get(item.id)
-          if (curr) {
-            next.set(item.id, { ...curr, status: 'error', error: res.error })
-          }
-          return next
-        })
+        updateDownload(item.id, { status: 'error', error: res.error })
         return { success: false }
       }
       return { success: true, filePath: res.filePath }
     } catch (err: any) {
-      setDownloads((prev) => {
-        const next = new Map(prev)
-        const curr = next.get(item.id)
-        if (curr) {
-          next.set(item.id, { ...curr, status: 'error', error: err?.message || 'Download failed' })
-        }
-        return next
-      })
+      updateDownload(item.id, { status: 'error', error: err?.message || 'Download failed' })
       return { success: false }
     }
-  }, [targetFolder])
+  }, [targetFolder, addDownload, updateDownload])
 
   const cancelDownload = async (videoId: string) => {
     await window.lokal.ytdlp.cancel(videoId)
-    setDownloads((prev) => {
-      const next = new Map(prev)
-      const curr = next.get(videoId)
-      if (curr) {
-        next.set(videoId, { ...curr, status: 'cancelled' })
-      }
-      return next
-    })
+    updateDownload(videoId, { status: 'cancelled' })
   }
 
   const playDownloadedFile = (filePath?: string) => {
@@ -522,17 +476,17 @@ export function DownloadView(): React.JSX.Element {
   const activeCount = downloadList.filter((d) => d.status === 'downloading' || d.status === 'converting').length
 
   return (
-    <div className="flex flex-col h-full bg-[#121212] text-white overflow-y-auto select-none">
+<div className="flex flex-col h-full bg-[#121212] text-white overflow-y-auto select-none">
       {/* ── Top Hero Header ── */}
       <div className={`px-8 pt-8 pb-6 flex-shrink-0 border-b border-white/5 ${
         isRelatedMode
           ? 'bg-gradient-to-b from-[#1a2538] to-[#121212]'
           : 'bg-gradient-to-b from-[#1a3826] to-[#121212]'
       }`}>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="min-w-0 max-w-full md:max-w-[calc(100%-280px)]">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3 min-w-0">
-              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 ${
+              <div className={`w-11 h-11 rounded-xl flex-shrink-0 flex items-center justify-center shadow-lg ${
                 isRelatedMode
                   ? 'bg-blue-500/20 border border-blue-500/30 text-blue-400 shadow-blue-500/10'
                   : 'bg-accent/20 border border-accent/30 text-accent shadow-accent/10'
@@ -550,18 +504,18 @@ export function DownloadView(): React.JSX.Element {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 min-w-0">
                   <h1
-                    className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-white truncate max-w-[380px] sm:max-w-[500px]"
+                    className="text-xl md:text-2xl font-extrabold tracking-tight text-white truncate max-w-[400px] lg:max-w-[560px]"
                     title={isRelatedMode ? `Related to: ${seedTitle || 'Track'}` : 'Search & Download'}
                   >
-                    {isRelatedMode ? `Related: ${seedTitle || 'Track'}` : 'Search & Download'}
+                    {isRelatedMode ? `Related to: ${seedTitle || 'Track'}` : 'Search & Download'}
                   </h1>
                   {isRelatedMode && (
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 flex-shrink-0">
+                    <span className="flex-shrink-0 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
                       YouTube Mix
                     </span>
                   )}
                 </div>
-                <p className="text-xs lg:text-sm text-[#b3b3b3] mt-0.5 truncate max-w-[480px]">
+                <p className="text-xs text-[#b3b3b3] mt-0.5 truncate max-w-[620px]">
                   {isRelatedMode
                     ? 'Songs frequently listened to together on YouTube. Preview, download individually, or download all.'
                     : 'Search songs by title or artist — downloads directly into your local library as MP3 with tags & artwork.'}
@@ -571,7 +525,7 @@ export function DownloadView(): React.JSX.Element {
           </div>
 
           {/* Right Action: Target Folder Selector & Back button */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-shrink-0">
             {isRelatedMode && (
               <button
                 onClick={() => setSearchParams({})}
@@ -612,10 +566,8 @@ export function DownloadView(): React.JSX.Element {
               onChange={(e) => setQuery(e.target.value)}
               placeholder={
                 isRelatedMode
-                  ? seedTitle && seedTitle.length > 28
-                    ? `Search instead of "${seedTitle.slice(0, 26)}..."`
-                    : `Search instead of "${seedTitle || 'this track'}"...`
-                  : 'Enter song name, artist, or lyrics...'
+                  ? `Search another song instead of "${seedTitle && seedTitle.length > 25 ? seedTitle.slice(0, 25) + '...' : (seedTitle || 'this')}"...`
+                  : "Enter song name, artist, or lyrics..."
               }
               className="w-full bg-[#242424] hover:bg-[#2a2a2a] focus:bg-[#282828] text-white text-sm rounded-full pl-11 pr-10 py-3.5 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-accent transition-all shadow-inner"
             />
@@ -654,28 +606,22 @@ export function DownloadView(): React.JSX.Element {
       <div className="flex-1 p-8 flex flex-col gap-8 max-w-6xl">
         {/* ── 1. Active Downloads Section (if any exist) ── */}
         {downloadList.length > 0 && (
-          <section className="flex flex-col gap-3">
+          <section className="bg-[#151515] p-5 rounded-2xl border border-white/5 flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                Downloads & Queue
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-base font-bold text-white">Downloads & Queue</h2>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-white/80 font-mono">
+                  {downloadList.length} {downloadList.length === 1 ? 'item' : 'items'}
+                </span>
                 {activeCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-accent text-black animate-pulse">
-                    {activeCount} active
+                  <span className="text-xs text-accent animate-pulse font-medium">
+                    • {activeCount} in progress
                   </span>
                 )}
-              </h2>
+              </div>
+
               <button
-                onClick={() => {
-                  setDownloads((prev) => {
-                    const next = new Map()
-                    for (const [id, item] of prev.entries()) {
-                      if (item.status === 'downloading' || item.status === 'converting') {
-                        next.set(id, item)
-                      }
-                    }
-                    return next
-                  })
-                }}
+                onClick={() => clearFinishedDownloads()}
                 className="text-xs text-[#888] hover:text-white transition-colors cursor-pointer"
               >
                 Clear finished
@@ -810,8 +756,8 @@ export function DownloadView(): React.JSX.Element {
         {/* ── 2. Search / Related Results Section ── */}
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0 max-w-[55%]">
-              <h2 className="text-lg font-bold text-white tracking-tight truncate">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-white tracking-tight">
                 {isSearching
                   ? (isRelatedMode ? 'Loading YouTube Mix…' : 'Searching YouTube…')
                   : isRelatedMode
@@ -828,7 +774,7 @@ export function DownloadView(): React.JSX.Element {
                 {/* Simultaneous download toggle */}
                 <button
                   type="button"
-                  onClick={() => setDownloadSimultaneously((prev) => !prev)}
+                  onClick={() => setDownloadSimultaneously(!downloadSimultaneously)}
                   className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-medium transition-all cursor-pointer select-none ${
                     downloadSimultaneously
                       ? 'bg-accent/15 border-accent/40 text-accent hover:bg-accent/25'

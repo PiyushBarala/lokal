@@ -47,11 +47,12 @@ export function NowPlayingExpandedView(): React.JSX.Element {
     opacity: 0,
   })
   const [isArtHovered, setIsArtHovered] = useState(false)
-  const [isWideThumbnail, setIsWideThumbnail] = useState(false)
+  const [isWidescreen, setIsWidescreen] = useState(false)
 
+  // Reset widescreen detection on track change
   useEffect(() => {
-    setIsWideThumbnail(false)
-  }, [currentTrack?.filePath, currentTrack?.id])
+    setIsWidescreen(false)
+  }, [currentTrack?.filePath, currentTrack?.artworkPath])
 
   // ── Option 11: Volume HUD State ─────────────────────────────────
   const [volumeHUD, setVolumeHUD] = useState<{
@@ -337,76 +338,76 @@ export function NowPlayingExpandedView(): React.JSX.Element {
         isIdle ? 'cursor-none' : ''
       }`}
     >
-      {/* ── Blurred Living Thumbnail & Dynamic Moving Mesh Backdrop ──── */}
+      {/* ── Dynamic Living Blurred Thumbnail & Ambient Mesh Backdrop ──────────── */}
       <div className="absolute inset-0 bg-[#080808] -z-20 overflow-hidden pointer-events-none select-none">
-        {/* Living, breathing blurred thumbnail */}
-        {artworkUrl && (
-          <div className="absolute -inset-20 overflow-hidden opacity-75">
+        {/* Living Blurred Artwork Backdrop (animates & breathes organically while playing) */}
+        {artworkUrl ? (
+          <div
+            className="absolute -inset-24 overflow-hidden animate-living-thumbnail"
+            style={{
+              animationPlayState: isPlaying ? 'running' : 'paused',
+            }}
+          >
             <img
               src={artworkUrl}
               alt=""
-              className="w-full h-full object-cover select-none pointer-events-none animate-alive-thumbnail"
+              className="w-full h-full object-cover select-none pointer-events-none transition-all duration-1000"
               style={{
-                filter: 'blur(42px) saturate(1.5) brightness(0.6)',
-                animationPlayState: isPlaying ? 'running' : 'paused',
+                filter: 'blur(50px) saturate(1.4) brightness(0.65)',
+                transform: 'scale(1.15)',
               }}
             />
           </div>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-[#181818] to-[#080808]" />
         )}
 
-        {/* Fluid Swirling Mesh Gradient Accents layered over blurred thumbnail */}
+        {/* Dynamic ambient color glow blooms matching the track's colors */}
         <div
-          className="absolute -inset-28 overflow-hidden pointer-events-none mix-blend-screen opacity-70"
+          className="absolute -inset-28 overflow-hidden pointer-events-none opacity-40 mix-blend-screen"
           style={{
-            filter: 'blur(88px)',
+            filter: 'blur(92px)',
           }}
         >
           {/* Blob 1: Primary Dominant Tone */}
           <div
-            className="absolute top-[6%] left-[10%] w-[68vw] h-[68vh] rounded-full animate-fluid-blob-1 transition-colors duration-1000"
+            className="absolute top-[8%] left-[10%] w-[62vw] h-[62vh] rounded-full animate-fluid-blob-1 transition-colors duration-1000"
             style={{
-              background: `radial-gradient(circle, ${palette.primary}e0 0%, ${palette.primary}00 70%)`,
+              background: `radial-gradient(circle, ${palette.primary}e0 0%, transparent 70%)`,
               animationPlayState: isPlaying ? 'running' : 'paused',
             }}
           />
 
           {/* Blob 2: Vibrant Secondary Shift */}
           <div
-            className="absolute bottom-[6%] right-[6%] w-[64vw] h-[64vh] rounded-full animate-fluid-blob-2 transition-colors duration-1000"
+            className="absolute bottom-[8%] right-[8%] w-[58vw] h-[58vh] rounded-full animate-fluid-blob-2 transition-colors duration-1000"
             style={{
-              background: `radial-gradient(circle, ${palette.secondary}d0 0%, ${palette.secondary}00 70%)`,
+              background: `radial-gradient(circle, ${palette.secondary}d0 0%, transparent 70%)`,
               animationPlayState: isPlaying ? 'running' : 'paused',
             }}
           />
 
           {/* Blob 3: Accent / Tertiary Tone */}
           <div
-            className="absolute top-[36%] right-[26%] w-[50vw] h-[50vh] rounded-full animate-fluid-blob-3 transition-colors duration-1000"
+            className="absolute top-[36%] right-[24%] w-[48vw] h-[48vh] rounded-full animate-fluid-blob-3 transition-colors duration-1000"
             style={{
-              background: `radial-gradient(circle, ${palette.tertiary}c0 0%, ${palette.tertiary}00 68%)`,
+              background: `radial-gradient(circle, ${palette.tertiary}c0 0%, transparent 68%)`,
               animationPlayState: isPlaying ? 'running' : 'paused',
-            }}
-          />
-
-          {/* Blob 4: Soft Central Mood Core */}
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[72vw] h-[72vh] rounded-full transition-colors duration-1000"
-            style={{
-              background: `radial-gradient(circle, ${palette.primary}50 0%, transparent 70%)`,
             }}
           />
         </div>
 
-        {/* Deep cinematic vignette to maintain contrast and legibility */}
+        {/* Deep cinematic vignette to maintain contrast, legibility, and 3D depth */}
         <div
           className="absolute inset-0"
           style={{
-            background: 'radial-gradient(ellipse at 50% 45%, transparent 20%, rgba(8,8,8,0.55) 65%, #080808 100%)',
+            background:
+              'radial-gradient(ellipse at 50% 50%, rgba(8,8,8,0.2) 20%, rgba(8,8,8,0.65) 70%, #080808 100%)',
           }}
         />
 
         {/* Bottom subtle scrim */}
-        <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-[#080808] to-transparent opacity-80" />
+        <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-[#080808] to-transparent opacity-85" />
       </div>
 
       {/* ── Option 11: Volume HUD Floating Overlay ───────────────── */}
@@ -510,9 +511,9 @@ export function NowPlayingExpandedView(): React.JSX.Element {
             onMouseMove={handleArtMouseMove}
             onMouseLeave={handleArtMouseLeave}
             className={`relative rounded-2xl overflow-hidden ring-1 ring-white/15 cursor-pointer select-none transition-all duration-500 ${
-              isWideThumbnail
-                ? 'max-w-[560px] w-[50vh] sm:w-[58vh] max-h-[340px] aspect-video'
-                : 'max-w-[420px] max-h-[420px] w-[28vh] h-[28vh] min-w-[140px] min-h-[140px] sm:w-[32vh] sm:h-[32vh] lg:w-[42vh] lg:h-[42vh] aspect-square'
+              isWidescreen
+                ? 'aspect-video w-[48vh] h-[27vh] min-w-[240px] min-h-[135px] sm:w-[58vh] sm:h-[32.6vh] lg:w-[68vh] lg:h-[38.25vh] max-w-[620px] max-h-[350px]'
+                : 'aspect-square w-[28vh] h-[28vh] min-w-[140px] min-h-[140px] sm:w-[32vh] sm:h-[32vh] lg:w-[42vh] lg:h-[42vh] max-w-[420px] max-h-[420px]'
             }`}
             style={{
               transform: `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(${
@@ -532,9 +533,9 @@ export function NowPlayingExpandedView(): React.JSX.Element {
                 src={artworkUrl}
                 alt={currentTrack.title}
                 onLoad={(e) => {
-                  const img = e.currentTarget
-                  if (img.naturalWidth && img.naturalHeight) {
-                    setIsWideThumbnail(img.naturalWidth / img.naturalHeight > 1.25)
+                  const { naturalWidth, naturalHeight } = e.currentTarget
+                  if (naturalWidth && naturalHeight) {
+                    setIsWidescreen(naturalWidth / naturalHeight > 1.25)
                   }
                 }}
                 className="w-full h-full object-cover select-none pointer-events-none"

@@ -19,6 +19,7 @@ import { DownloadView } from './views/DownloadView'
 import { NowPlayingExpandedView } from './components/NowPlayingExpandedView'
 import { useLibraryStore } from './stores/libraryStore'
 import { usePlayerStore } from './stores/playerStore'
+import { initGlobalDownloadListener } from './stores/downloadStore'
 
 function ToastNotification() {
   const [toast, setToast] = useState<string | null>(null)
@@ -226,6 +227,8 @@ function AppInner(): React.JSX.Element {
 
   useEffect(() => {
     loadLibrary().catch(console.error)
+    const cleanupDownloads = initGlobalDownloadListener()
+    return () => cleanupDownloads()
   }, [])
 
   return (

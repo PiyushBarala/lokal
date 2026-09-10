@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { YtSearchResult, DownloadItem, DownloadProgress } from '../types'
+import { useLibraryStore } from './libraryStore'
 
 interface DownloadState {
   query: string
@@ -10,33 +11,38 @@ interface DownloadState {
   hasMore: boolean
   searchOffset: number
   searchError: string | null
+
+  seedVideoId: string | null
+  seedTitle: string | null
+  isRelatedMode: boolean
+
   targetFolder: string
   downloadSimultaneously: boolean
   isDownloadingAll: boolean
   downloadAllProgress: { current: number; total: number } | null
+
   downloads: Map<string, DownloadItem>
-  activeSeedVideoId: string | null
-  activeSeedTitle: string | null
 
   // Actions
-  setQuery: (query: string) => void
+  setQuery: (q: string) => void
   setResults: (results: YtSearchResult[] | ((prev: YtSearchResult[]) => YtSearchResult[])) => void
-  setHasSearched: (hasSearched: boolean) => void
-  setIsSearching: (isSearching: boolean) => void
-  setIsLoadingMore: (isLoadingMore: boolean) => void
-  setHasMore: (hasMore: boolean) => void
+  appendResults: (items: YtSearchResult[]) => void
+  setHasSearched: (v: boolean) => void
+  setIsSearching: (v: boolean) => void
+  setIsLoadingMore: (v: boolean) => void
+  setHasMore: (v: boolean) => void
   setSearchOffset: (offset: number | ((prev: number) => number)) => void
-  setSearchError: (error: string | null) => void
+  setSearchError: (err: string | null) => void
+  setRelatedSeed: (seedVideoId: string | null, seedTitle: string | null) => void
   setTargetFolder: (folder: string) => void
-  setDownloadSimultaneously: (enabled: boolean | ((prev: boolean) => boolean)) => void
-  setIsDownloadingAll: (isDownloadingAll: boolean) => void
-  setDownloadAllProgress: (progress: { current: number; total: number } | null) => void
-  setDownloads: (
-    downloads: Map<string, DownloadItem> | ((prev: Map<string, DownloadItem>) => Map<string, DownloadItem>)
-  ) => void
-  updateDownloadItem: (videoId: string, update: Partial<DownloadItem>) => void
-  setActiveSeed: (videoId: string | null, title: string | null) => void
-  clearSearch: () => void
+  setDownloadSimultaneously: (v: boolean | ((prev: boolean) => boolean)) => void
+  setIsDownloadingAll: (v: boolean) => void
+  setDownloadAllProgress: (p: { current: number; total: number } | null) => void
+
+  addDownload: (item: DownloadItem) => void
+  updateDownload: (videoId: string, update: Partial<DownloadItem>) => void
+  removeDownload: (videoId: string) => void
+  clearFinishedDownloads: () => void
 }
 
 export const useDownloadStore = create<DownloadState>((set, get) => ({
@@ -48,82 +54,160 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   hasMore: true,
   searchOffset: 1,
   searchError: null,
+
+  seedVideoId: null,
+  seedTitle: null,
+  isRelatedMode: false,
+
   targetFolder: '',
   downloadSimultaneously: true,
   isDownloadingAll: false,
   downloadAllProgress: null,
+
   downloads: new Map<string, DownloadItem>(),
-  activeSeedVideoId: null,
-  activeSeedTitle: null,
 
   setQuery: (query) => set({ query }),
   setResults: (results) =>
     set((state) => ({
       results: typeof results === 'function' ? results(state.results) : results,
     })),
+  appendResults: (newItems) =>
+    set((state) => {
+      const existingIds = new Set(state.results.map((r) => r.id))
+      const filtered = newItems.filter((i) => !existingIds.has(i.id))
+      return { results: [...state.results, ...filtered] }
+    }),
   setHasSearched: (hasSearched) => set({ hasSearched }),
   setIsSearching: (isSearching) => set({ isSearching }),
   setIsLoadingMore: (isLoadingMore) => set({ isLoadingMore }),
   setHasMore: (hasMore) => set({ hasMore }),
-  setSearchOffset: (offset) =>
+  setSearchOffset: (searchOffset) =>
     set((state) => ({
-      searchOffset: typeof offset === 'function' ? offset(state.searchOffset) : offset,
+      searchOffset: typeof searchOffset === 'function' ? searchOffset(state.searchOffset) : searchOffset,
     })),
   setSearchError: (searchError) => set({ searchError }),
+
+  setRelatedSeed: (seedVideoId, seedTitle) =>
+    set({
+      seedVideoId,
+      seedTitle,
+      isRelatedMode: Boolean(seedVideoId),
+    }),
+
   setTargetFolder: (targetFolder) => set({ targetFolder }),
-  setDownloadSimultaneously: (enabled) =>
+  setDownloadSimultaneously: (downloadSimultaneously) =>
     set((state) => ({
       downloadSimultaneously:
-        typeof enabled === 'function' ? enabled(state.downloadSimultaneously) : enabled,
+        typeof downloadSimultaneously === 'function'
+          ? downloadSimultaneously(state.downloadSimultaneously)
+          : downloadSimultaneously,
     })),
   setIsDownloadingAll: (isDownloadingAll) => set({ isDownloadingAll }),
   setDownloadAllProgress: (downloadAllProgress) => set({ downloadAllProgress }),
-  setDownloads: (downloads) =>
-    set((state) => ({
-      downloads: typeof downloads === 'function' ? downloads(state.downloads) : downloads,
-    })),
-  updateDownloadItem: (videoId, update) =>
+
+  addDownload: (item) =>
     set((state) => {
-      const nextMap = new Map(state.downloads)
-      const existing = nextMap.get(videoId)
-      if (existing) {
-        nextMap.set(videoId, { ...existing, ...update })
-      }
-      return { downloads: nextMap }
+      const next = new Map(state.downloads)
+      next.set(item.id, item)
+      return { downloads: next }
     }),
-  setActiveSeed: (videoId, title) =>
-    set({ activeSeedVideoId: videoId, activeSeedTitle: title }),
-  clearSearch: () =>
-    set({
-      query: '',
-      results: [],
-      hasSearched: false,
-      searchOffset: 1,
-      hasMore: true,
-      searchError: null,
+
+  updateDownload: (videoId, update) =>
+    set((state) => {
+      const next = new Map(state.downloads)
+      const existing = next.get(videoId)
+      if (existing) {
+        next.set(videoId, { ...existing, ...update })
+      }
+      return { downloads: next }
+    }),
+
+  removeDownload: (videoId) =>
+    set((state) => {
+      const next = new Map(state.downloads)
+      next.delete(videoId)
+      return { downloads: next }
+    }),
+
+  clearFinishedDownloads: () =>
+    set((state) => {
+      const next = new Map(state.downloads)
+      for (const [id, d] of next.entries()) {
+        if (d.status === 'completed' || d.status === 'error' || d.status === 'cancelled') {
+          next.delete(id)
+        }
+      }
+      return { downloads: next }
     }),
 }))
 
-// Global listener for ytdlp progress events to persist state across route navigation
-if (typeof window !== 'undefined') {
-  const tryAttachListener = () => {
-    if (window.lokal?.ytdlp?.onProgress) {
-      window.lokal.ytdlp.onProgress((progress: DownloadProgress) => {
-        useDownloadStore.getState().updateDownloadItem(progress.videoId, {
-          percent: progress.percent,
-          speed: progress.speed,
-          eta: progress.eta,
-          status: progress.status,
-          filePath: progress.filePath,
-          error: progress.error,
-        })
-      })
-    }
-  }
+/**
+ * Automatically add downloaded track into the "Downloads" playlist
+ */
+export async function ensureTrackInDownloadsPlaylist(filePath?: string, videoId?: string): Promise<void> {
+  try {
+    const allTracks = await window.lokal.db.getTracks()
+    const track = allTracks.find(
+      (t) =>
+        (filePath && t.filePath.toLowerCase() === filePath.toLowerCase()) ||
+        (videoId && t.sourceVideoId === videoId)
+    )
+    if (!track?.id) return
 
-  if (document.readyState === 'loading') {
-    window.addEventListener('DOMContentLoaded', tryAttachListener)
-  } else {
-    tryAttachListener()
+    const playlists = await window.lokal.db.getPlaylists()
+    let downloadsPlaylist = playlists.find((p) => p.name.trim().toLowerCase() === 'downloads')
+    if (!downloadsPlaylist) {
+      downloadsPlaylist = await window.lokal.db.createPlaylist('Downloads')
+    }
+    if (downloadsPlaylist?.id) {
+      const existingTracks = await window.lokal.db.getPlaylistTracks(downloadsPlaylist.id)
+      const alreadyIn = existingTracks.some((t) => t.id === track.id)
+      if (!alreadyIn) {
+        await window.lokal.db.addTrackToPlaylist(downloadsPlaylist.id, track.id)
+        await useLibraryStore.getState().refreshPlaylists()
+      }
+    }
+  } catch (err) {
+    console.error('[DownloadStore] Failed to add track to Downloads playlist:', err)
+  }
+}
+
+/**
+ * Global IPC progress listener — initialized once at the application level
+ * so downloads continue tracking accurately across all view navigations.
+ */
+let isListenerInitialized = false
+
+export function initGlobalDownloadListener(): () => void {
+  if (isListenerInitialized || typeof window === 'undefined' || !window.lokal?.ytdlp?.onProgress) {
+    return () => {}
+  }
+  isListenerInitialized = true
+
+  const unsub = window.lokal.ytdlp.onProgress((progress: DownloadProgress) => {
+    useDownloadStore.getState().updateDownload(progress.videoId, {
+      percent: progress.percent,
+      speed: progress.speed,
+      eta: progress.eta,
+      status: progress.status,
+      filePath: progress.filePath,
+      error: progress.error,
+    })
+
+    if (progress.status === 'completed') {
+      useLibraryStore.getState().loadLibrary().then(async () => {
+        window.dispatchEvent(
+          new CustomEvent('lokal:toast', {
+            detail: 'Track downloaded and added to Downloads playlist',
+          })
+        )
+        await ensureTrackInDownloadsPlaylist(progress.filePath, progress.videoId)
+      }).catch(console.error)
+    }
+  })
+
+  return () => {
+    unsub()
+    isListenerInitialized = false
   }
 }
