@@ -100,6 +100,7 @@ declare global {
         getLastStatus: () => Promise<UpdateStatus>
         checkForUpdates: () => Promise<{ success: boolean; error?: string }>
         downloadUpdate: () => Promise<{ success: boolean; error?: string }>
+        openReleasePage: (url?: string) => Promise<{ success: boolean }>
         quitAndInstall: () => Promise<void>
         onStatus: (cb: (status: UpdateStatus) => void) => () => void
       }

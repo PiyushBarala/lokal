@@ -101,8 +101,9 @@ export function writeTracksToDb(scannedTracks: (ScannedTrack & { artworkData: Bu
   let inserted = 0
 
   for (const t of scannedTracks) {
+    const normPath = path.normalize(t.filePath)
     // If already in DB, update title, artist, and metadata
-    const existing = execRows('SELECT id, artwork_path FROM tracks WHERE file_path = ?', [t.filePath])
+    const existing = execRows('SELECT id, artwork_path FROM tracks WHERE file_path = ? OR file_path = ?', [normPath, t.filePath])
     if (existing.length > 0) {
       const existingId = existing[0].id as number
       let artworkPath = (existing[0].artwork_path as string) || null
@@ -116,6 +117,7 @@ export function writeTracksToDb(scannedTracks: (ScannedTrack & { artworkData: Bu
       const albumId = upsertAlbum(t.album, t.albumArtist, albumArtistId, t.year, artworkPath)
       db.run(
         `UPDATE tracks SET
+           file_path = ?,
            title = ?,
            artist_id = ?,
            album_id = ?,
@@ -124,7 +126,7 @@ export function writeTracksToDb(scannedTracks: (ScannedTrack & { artworkData: Bu
            artwork_path = COALESCE(?, artwork_path),
            source_video_id = COALESCE(?, source_video_id)
          WHERE id = ?`,
-        [t.title, artistId, albumId, t.albumArtist, artworkPath, artworkPath, t.sourceVideoId || null, existingId]
+        [normPath, t.title, artistId, albumId, t.albumArtist, artworkPath, artworkPath, t.sourceVideoId || null, existingId]
       )
       continue
     }
@@ -148,7 +150,7 @@ export function writeTracksToDb(scannedTracks: (ScannedTrack & { artworkData: Bu
          has_artwork, artwork_path, genre, comment, source_video_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        t.filePath, t.fileHash, t.title, artistId, albumId, t.albumArtist,
+        normPath, t.fileHash, t.title, artistId, albumId, t.albumArtist,
         t.year, t.trackNumber, t.discNumber, t.duration, t.bitrate, t.sampleRate,
         t.hasArtwork ? 1 : 0, artworkPath, t.genre, t.comment, t.sourceVideoId || null
       ]

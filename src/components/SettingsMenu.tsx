@@ -26,7 +26,7 @@ export function resetZoom(): void {
 
 // ── About Modal ───────────────────────────────────────────────────
 function AboutModal({ onClose }: { onClose: () => void }) {
-  const [version, setVersion] = useState('1.1.2')
+  const [version, setVersion] = useState('1.1.3')
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [isChecking, setIsChecking] = useState(false)
 
@@ -126,9 +126,26 @@ function AboutModal({ onClose }: { onClose: () => void }) {
               </button>
             </div>
           ) : status?.type === 'available' ? (
-            <div className="flex items-center gap-2 text-xs text-white py-1">
-              <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
-              <span>New version available (v{status.version}). Downloading...</span>
+            <div className="w-full flex flex-col items-center gap-2 py-0.5">
+              <div className="flex items-center gap-1.5 text-xs text-accent font-semibold">
+                <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
+                <span>v{status.version} is available!</span>
+              </div>
+              <button
+                onClick={() => {
+                  if (status.downloadUrl) {
+                    window.lokal?.updater?.openReleasePage?.(status.downloadUrl)
+                  } else {
+                    window.lokal?.updater?.downloadUpdate?.()
+                  }
+                }}
+                className="w-full py-2 rounded-lg bg-accent text-black font-bold text-xs hover:bg-accent/90 transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
+                </svg>
+                <span>Download v{status.version}</span>
+              </button>
             </div>
           ) : status?.type === 'not-available' ? (
             <div className="flex items-center justify-between w-full">
@@ -146,14 +163,22 @@ function AboutModal({ onClose }: { onClose: () => void }) {
               </button>
             </div>
           ) : status?.type === 'error' ? (
-            <div className="flex flex-col items-center gap-1 w-full">
+            <div className="flex flex-col items-center gap-1.5 w-full">
               <span className="text-[11px] text-red-400">{status.message || 'Check failed'}</span>
-              <button
-                onClick={handleCheckUpdates}
-                className="text-[11px] text-white/90 hover:text-white underline"
-              >
-                Retry
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleCheckUpdates}
+                  className="text-[11px] text-white/90 hover:text-white underline"
+                >
+                  Retry
+                </button>
+                <button
+                  onClick={() => window.lokal?.updater?.openReleasePage?.()}
+                  className="text-[11px] text-[#b3b3b3] hover:text-white underline"
+                >
+                  View on GitHub
+                </button>
+              </div>
             </div>
           ) : (
             <button

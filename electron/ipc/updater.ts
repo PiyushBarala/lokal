@@ -51,6 +51,77 @@ function compareVersions(v1: string, v2: string): number {
   return 0
 }
 
+async function checkViaRedirect(): Promise<void> {
+  return new Promise((resolve) => {
+    const req = https.get(
+      'https://github.com/PiyushBarala/lokal/releases/latest',
+      {
+        headers: {
+          'User-Agent': 'Lokal-Music-Player/' + app.getVersion(),
+        },
+      },
+      (res) => {
+        const loc = res.headers.location
+        if (loc) {
+          const match = loc.match(/\/tag\/(v?[0-9.]+)/i)
+          if (match) {
+            const remoteVer = match[1].replace(/^v/, '')
+            const currentVer = app.getVersion()
+            if (compareVersions(remoteVer, currentVer) > 0) {
+              sendStatus({
+                type: 'available',
+                currentVersion: currentVer,
+                version: remoteVer,
+                downloadUrl: loc,
+                message: `New version ${remoteVer} available on GitHub.`,
+              })
+              resolve()
+              return
+            } else {
+              sendStatus({
+                type: 'not-available',
+                currentVersion: currentVer,
+                version: currentVer,
+                message: `Lokal is up to date (v${currentVer}).`,
+              })
+              resolve()
+              return
+            }
+          }
+        }
+
+        sendStatus({
+          type: 'not-available',
+          currentVersion: app.getVersion(),
+          version: app.getVersion(),
+          message: `Lokal is up to date (v${app.getVersion()}).`,
+        })
+        resolve()
+      }
+    )
+
+    req.on('error', (err) => {
+      sendStatus({
+        type: 'error',
+        currentVersion: app.getVersion(),
+        error: err.message,
+        message: 'Could not connect to update server. Check internet connection.',
+      })
+      resolve()
+    })
+
+    req.setTimeout(8000, () => {
+      req.destroy()
+      sendStatus({
+        type: 'error',
+        currentVersion: app.getVersion(),
+        message: 'Connection timed out checking for updates.',
+      })
+      resolve()
+    })
+  })
+}
+
 async function checkGitHubReleasesDirectly(): Promise<void> {
   return new Promise((resolve) => {
     const req = https.get(
@@ -66,7 +137,7 @@ async function checkGitHubReleasesDirectly(): Promise<void> {
         res.on('data', (chunk) => {
           rawData += chunk
         })
-        res.on('end', () => {
+        res.on('end', async () => {
           try {
             if (res.statusCode === 200) {
               const releases = JSON.parse(rawData)
@@ -104,35 +175,21 @@ async function checkGitHubReleasesDirectly(): Promise<void> {
             console.error('[Updater] Fallback JSON parse error:', e)
           }
 
-          sendStatus({
-            type: 'not-available',
-            currentVersion: app.getVersion(),
-            version: app.getVersion(),
-            message: `Lokal is up to date (v${app.getVersion()}).`,
-          })
+          // Fallback to release redirect check if API was rate limited or empty
+          await checkViaRedirect()
           resolve()
         })
       }
     )
 
-    req.on('error', (err) => {
-      console.warn('[Updater] Direct GitHub check error:', err)
-      sendStatus({
-        type: 'error',
-        currentVersion: app.getVersion(),
-        error: err.message,
-        message: 'Could not connect to GitHub. Check internet connection.',
-      })
+    req.on('error', async () => {
+      await checkViaRedirect()
       resolve()
     })
 
-    req.setTimeout(8000, () => {
+    req.setTimeout(6000, async () => {
       req.destroy()
-      sendStatus({
-        type: 'error',
-        currentVersion: app.getVersion(),
-        message: 'Connection timed out checking for updates.',
-      })
+      await checkViaRedirect()
       resolve()
     })
   })
@@ -212,25 +269,17 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
 
   // Event: error
   autoUpdater.on('error', async (err: Error) => {
-    console.error('[Updater] autoUpdater error:', err)
-    const errStr = String(err?.message || err)
-    if (
-      errStr.includes('404') ||
-      errStr.includes('latest.yml') ||
-      errStr.includes('Cannot find') ||
-      errStr.includes('HttpError')
-    ) {
-      console.log('[Updater] latest.yml missing or 404, falling back to direct GitHub releases API...')
+    console.error('[Updater] autoUpdater error, attempting direct GitHub release check:', err)
+    try {
       await checkGitHubReleasesDirectly()
-      return
+    } catch {
+      sendStatus({
+        type: 'error',
+        currentVersion: app.getVersion(),
+        error: err.message || 'Failed to check for updates',
+        message: 'Could not connect to update server. Check internet connection.',
+      })
     }
-
-    sendStatus({
-      type: 'error',
-      currentVersion: app.getVersion(),
-      error: err.message || 'Failed to check for updates',
-      message: 'Failed to check for updates. Check internet connection.',
-    })
   })
 
   // ── IPC Handlers ────────────────────────────────────────────────
@@ -243,51 +292,19 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
   })
 
   ipcMain.handle('updater:check', async () => {
-    if (!app.isPackaged && process.env.NODE_ENV === 'development') {
-      console.log('[Updater] In development mode, autoUpdater will simulate check.')
-      sendStatus({
-        type: 'checking',
-        currentVersion: app.getVersion(),
-        message: 'Checking for updates (Dev mode)...',
-      })
-      setTimeout(() => {
-        sendStatus({
-          type: 'not-available',
-          currentVersion: app.getVersion(),
-          message: `Lokal v${app.getVersion()} is up to date (Dev Mode).`,
-        })
-      }, 1000)
-      return { success: true }
-    }
+    sendStatus({
+      type: 'checking',
+      currentVersion: app.getVersion(),
+      message: 'Checking for updates...',
+    })
 
     try {
-      sendStatus({
-        type: 'checking',
-        currentVersion: app.getVersion(),
-        message: 'Checking for updates...',
-      })
       await autoUpdater.checkForUpdates()
       return { success: true }
     } catch (err: any) {
-      console.error('[Updater] checkForUpdates failed:', err)
-      const errStr = String(err?.message || err)
-      if (
-        errStr.includes('404') ||
-        errStr.includes('latest.yml') ||
-        errStr.includes('Cannot find') ||
-        errStr.includes('HttpError')
-      ) {
-        console.log('[Updater] Falling back to direct GitHub check on check error...')
-        await checkGitHubReleasesDirectly()
-        return { success: true }
-      }
-      sendStatus({
-        type: 'error',
-        currentVersion: app.getVersion(),
-        error: err.message,
-        message: 'Could not connect to update server.',
-      })
-      return { success: false, error: err.message }
+      console.log('[Updater] autoUpdater.checkForUpdates threw, falling back to direct GitHub release check:', err?.message)
+      await checkGitHubReleasesDirectly()
+      return { success: true }
     }
   })
 
@@ -296,8 +313,19 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
       await autoUpdater.downloadUpdate()
       return { success: true }
     } catch (err: any) {
+      console.warn('[Updater] autoUpdater.downloadUpdate failed, opening release link:', err?.message)
+      if (lastStatus.downloadUrl) {
+        shell.openExternal(lastStatus.downloadUrl)
+        return { success: true }
+      }
       return { success: false, error: err.message }
     }
+  })
+
+  ipcMain.handle('updater:open-url', (_e, url?: string) => {
+    const target = url || lastStatus.downloadUrl || 'https://github.com/PiyushBarala/lokal/releases/latest'
+    shell.openExternal(target)
+    return { success: true }
   })
 
   ipcMain.handle('updater:install', () => {

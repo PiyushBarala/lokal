@@ -156,6 +156,7 @@ const api = {
     getLastStatus: (): Promise<any> => ipcRenderer.invoke('updater:get-last-status'),
     checkForUpdates: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('updater:check'),
     downloadUpdate: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('updater:download'),
+    openReleasePage: (url?: string): Promise<{ success: boolean }> => ipcRenderer.invoke('updater:open-url', url),
     quitAndInstall: (): Promise<void> => ipcRenderer.invoke('updater:install'),
     onStatus: (cb: (status: {
       type: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
@@ -166,6 +167,7 @@ const api = {
       transferred?: number
       total?: number
       releaseNotes?: string
+      downloadUrl?: string
       error?: string
       message?: string
     }) => void) => {

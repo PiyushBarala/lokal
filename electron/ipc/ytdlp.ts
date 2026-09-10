@@ -226,6 +226,7 @@ export function registerYtDlpHandlers(): void {
         activeDownloads.set(videoId, proc)
 
         let resolvedFilePath: string | null = null
+        let stdoutBuffer = ''
         let lastError = ''
 
         // Send initial progress
@@ -237,77 +238,72 @@ export function registerYtDlpHandlers(): void {
           status: 'downloading',
         })
 
+        const AUDIO_EXTS = ['.mp3', '.m4a', '.opus', '.flac', '.wav', '.ogg', '.aac', '.webm']
+
+        const processStdoutLine = (line: string) => {
+          const trimmed = line.trim()
+          if (!trimmed) return
+
+          // Check if yt-dlp printed the final after_move filepath (direct audio path)
+          if (AUDIO_EXTS.some((ext) => trimmed.toLowerCase().endsWith(ext)) && (trimmed.includes(outDir) || path.isAbsolute(trimmed))) {
+            resolvedFilePath = path.normalize(trimmed)
+            return
+          }
+
+          // 1. Check download progress regex
+          // e.g. [download]  42.3% of 3.45MiB at 1.2MiB/s ETA 00:05
+          const progressMatch = trimmed.match(
+            /\[download\]\s+([0-9.]+)%(?:\s+of\s+([~0-9.]+\s*[A-Za-z]+))?(?:\s+at\s+([0-9.]+\s*[A-Za-z/]+))?(?:\s+ETA\s+([0-9:]+))?/
+          )
+          if (progressMatch) {
+            const percent = parseFloat(progressMatch[1]) || 0
+            const speed = progressMatch[3] ? progressMatch[3].trim() : ''
+            const eta = progressMatch[4] ? progressMatch[4].trim() : ''
+            event.sender.send('ytdlp:progress', {
+              videoId,
+              percent,
+              speed,
+              eta,
+              status: 'downloading',
+            })
+            return
+          }
+
+          // 2. Check conversion / extraction state
+          if (trimmed.includes('[ExtractAudio]') || trimmed.includes('[Merger]') || trimmed.includes('[Metadata]')) {
+            event.sender.send('ytdlp:progress', {
+              videoId,
+              percent: 99,
+              speed: '',
+              eta: '',
+              status: 'converting',
+            })
+          }
+
+          // 3. Detect destination file path (accept any audio file, NOT image thumbnails)
+          const destAudioMatch = trimmed.match(/\[(?:ExtractAudio|download)\]\s+Destination:\s+(.+\.(?:mp3|m4a|opus|flac|wav|ogg|aac))$/i)
+          if (destAudioMatch) {
+            resolvedFilePath = path.normalize(destAudioMatch[1].trim())
+            return
+          }
+
+          const alreadyMatch = trimmed.match(/\[download\]\s+(.+?)\s+has already been downloaded/)
+          if (alreadyMatch) {
+            const candidate = alreadyMatch[1].trim()
+            if (AUDIO_EXTS.some((ext) => candidate.toLowerCase().endsWith(ext))) {
+              resolvedFilePath = path.normalize(candidate)
+            } else if (!candidate.match(/\.(webp|jpg|jpeg|png)$/i)) {
+              resolvedFilePath = path.normalize(candidate.replace(/\.[^.]+$/, '.mp3'))
+            }
+          }
+        }
+
         proc.stdout.on('data', (chunk: Buffer) => {
-          const text = chunk.toString()
-          const lines = text.split(/\r?\n/)
-
+          stdoutBuffer += chunk.toString()
+          const lines = stdoutBuffer.split(/\r?\n/)
+          stdoutBuffer = lines.pop() || ''
           for (const line of lines) {
-            const trimmed = line.trim()
-            if (!trimmed) continue
-
-            // Check if yt-dlp printed the final after_move filepath (direct MP3 path)
-            if (trimmed.toLowerCase().endsWith('.mp3') && (trimmed.includes(outDir) || path.isAbsolute(trimmed))) {
-              resolvedFilePath = trimmed
-              continue
-            }
-
-            // 1. Check download progress regex
-            // e.g. [download]  42.3% of 3.45MiB at 1.2MiB/s ETA 00:05
-            const progressMatch = trimmed.match(
-              /\[download\]\s+([0-9.]+)%(?:\s+of\s+([~0-9.]+\s*[A-Za-z]+))?(?:\s+at\s+([0-9.]+\s*[A-Za-z/]+))?(?:\s+ETA\s+([0-9:]+))?/
-            )
-            if (progressMatch) {
-              const percent = parseFloat(progressMatch[1]) || 0
-              const speed = progressMatch[3] ? progressMatch[3].trim() : ''
-              const eta = progressMatch[4] ? progressMatch[4].trim() : ''
-              event.sender.send('ytdlp:progress', {
-                videoId,
-                percent,
-                speed,
-                eta,
-                status: 'downloading',
-              })
-              continue
-            }
-
-            // 2. Check conversion / extraction state
-            if (trimmed.includes('[ExtractAudio]') || trimmed.includes('[Merger]') || trimmed.includes('[Metadata]')) {
-              event.sender.send('ytdlp:progress', {
-                videoId,
-                percent: 99,
-                speed: '',
-                eta: '',
-                status: 'converting',
-              })
-            }
-
-            // 3. Detect destination file path (only accept if it's the audio/mp3 file, NOT image thumbnails)
-            const destAudioMatch = trimmed.match(/\[ExtractAudio\]\s+Destination:\s+(.+\.mp3)$/i)
-            if (destAudioMatch) {
-              resolvedFilePath = destAudioMatch[1].trim()
-              continue
-            }
-
-            const destMatch = trimmed.match(/\[download\]\s+Destination:\s+(.+)$/)
-            if (destMatch) {
-              const candidate = destMatch[1].trim()
-              if (candidate.toLowerCase().endsWith('.mp3')) {
-                resolvedFilePath = candidate
-              } else if (!candidate.match(/\.(webp|jpg|jpeg|png)$/i)) {
-                // Audio intermediate format (e.g. .opus, .webm, .m4a)
-                resolvedFilePath = candidate.replace(/\.[^.]+$/, '.mp3')
-              }
-            }
-
-            const alreadyMatch = trimmed.match(/\[download\]\s+(.+?)\s+has already been downloaded/)
-            if (alreadyMatch) {
-              const candidate = alreadyMatch[1].trim()
-              if (candidate.toLowerCase().endsWith('.mp3')) {
-                resolvedFilePath = candidate
-              } else if (!candidate.match(/\.(webp|jpg|jpeg|png)$/i)) {
-                resolvedFilePath = candidate.replace(/\.[^.]+$/, '.mp3')
-              }
-            }
+            processStdoutLine(line)
           }
         })
 
@@ -330,15 +326,18 @@ export function registerYtDlpHandlers(): void {
 
         proc.on('close', async (code) => {
           activeDownloads.delete(videoId)
+          if (stdoutBuffer.trim()) {
+            processStdoutLine(stdoutBuffer)
+          }
 
-          // 1. Locate the downloaded MP3 file
-          let finalMp3 = resolvedFilePath
-          if (!finalMp3 || !fs.existsSync(finalMp3)) {
+          // 1. Locate the downloaded audio file
+          let finalAudio = resolvedFilePath
+          if (!finalAudio || !fs.existsSync(finalAudio)) {
             try {
-              const allMp3s = fs.readdirSync(outDir)
-                .filter((f) => f.toLowerCase().endsWith('.mp3'))
+              const allAudioFiles = fs.readdirSync(outDir)
+                .filter((f) => AUDIO_EXTS.some((ext) => f.toLowerCase().endsWith(ext)))
                 .map((f) => {
-                  const p = path.join(outDir, f)
+                  const p = path.normalize(path.join(outDir, f))
                   try {
                     const st = fs.statSync(p)
                     return { path: p, name: f, time: st.mtimeMs, size: st.size }
@@ -346,43 +345,41 @@ export function registerYtDlpHandlers(): void {
                     return null
                   }
                 })
-                .filter((f): f is NonNullable<typeof f> => f !== null && f.size > 50000)
+                .filter((f): f is NonNullable<typeof f> => f !== null && f.size > 20000)
 
-              // If title was provided, try matching filename with title tokens
+              // If title was provided, try matching filename with Unicode words
               if (title) {
-                const cleanTitleWords = title.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w) => w.length > 2)
-                const titleMatch = allMp3s.find((f) => {
+                const cleanTitleWords = title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(/\s+/).filter((w) => w.length > 2)
+                const titleMatch = allAudioFiles.find((f) => {
                   const fnLower = f.name.toLowerCase()
                   return cleanTitleWords.length > 0 && cleanTitleWords.filter((w) => fnLower.includes(w)).length >= Math.min(2, cleanTitleWords.length)
                 })
                 if (titleMatch) {
-                  finalMp3 = titleMatch.path
+                  finalAudio = titleMatch.path
                 }
               }
 
-              // Fallback: take the most recent MP3 modified in the last 2 minutes
-              if (!finalMp3) {
-                const recent = allMp3s
-                  .filter((f) => Date.now() - f.time < 120000)
+              // Fallback: take the most recent audio file modified in the last 3 minutes
+              if (!finalAudio) {
+                const recent = allAudioFiles
+                  .filter((f) => Date.now() - f.time < 180000)
                   .sort((a, b) => b.time - a.time)
                 if (recent.length > 0) {
-                  finalMp3 = recent[0].path
+                  finalAudio = recent[0].path
                 }
               }
             } catch {}
           }
 
-          // If the audio file was created successfully, treat as success even if yt-dlp exited
-          // with a warning/exit code (e.g. non-critical thumbnail download network glitch)
-          const isFileValid = Boolean(finalMp3 && fs.existsSync(finalMp3))
+          const isFileValid = Boolean(finalAudio && fs.existsSync(finalAudio))
 
           if (code === 0 || isFileValid) {
-            console.log(`[yt-dlp download] Completed. Final MP3: ${finalMp3}`)
+            console.log(`[yt-dlp download] Completed. Final audio file: ${finalAudio}`)
 
             // Index into database immediately with sourceVideoId
-            if (finalMp3 && fs.existsSync(finalMp3)) {
+            if (finalAudio && fs.existsSync(finalAudio)) {
               try {
-                await scanAndIndexFile(finalMp3, videoId)
+                await scanAndIndexFile(finalAudio, videoId)
               } catch (err) {
                 console.error('[yt-dlp download] Failed to index downloaded file:', err)
               }
@@ -394,10 +391,10 @@ export function registerYtDlpHandlers(): void {
               speed: '',
               eta: '',
               status: 'completed',
-              filePath: finalMp3 || undefined,
+              filePath: finalAudio || undefined,
             })
 
-            resolve({ success: true, filePath: finalMp3 || undefined })
+            resolve({ success: true, filePath: finalAudio || undefined })
           } else {
             console.error(`[yt-dlp download] Failed with exit code ${code}:`, lastError)
 
@@ -582,9 +579,10 @@ export function registerYtDlpHandlers(): void {
     if (!fs.existsSync(outDir)) return { synced: 0 }
 
     try {
+      const AUDIO_EXTS = ['.mp3', '.m4a', '.opus', '.flac', '.wav', '.ogg', '.aac', '.webm']
       const files = fs.readdirSync(outDir)
-        .filter((f) => f.toLowerCase().endsWith('.mp3'))
-        .map((f) => path.join(outDir!, f))
+        .filter((f) => AUDIO_EXTS.some((ext) => f.toLowerCase().endsWith(ext)))
+        .map((f) => path.normalize(path.join(outDir!, f)))
 
       let count = 0
       for (const filePath of files) {

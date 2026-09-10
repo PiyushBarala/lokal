@@ -1,5 +1,6 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
-import { promises as fs } from 'fs'
+import * as fs from 'fs'
+import { promises as fsp } from 'fs'
 import * as path from 'path'
 import * as crypto from 'crypto'
 import { writeTracksToDb } from '../db/dbHandlers'
@@ -44,7 +45,7 @@ export interface ScannedTrack {
 async function walkDir(dir: string, found: string[] = []): Promise<string[]> {
   let entries: import('fs').Dirent[]
   try {
-    entries = await fs.readdir(dir, { withFileTypes: true })
+    entries = await fsp.readdir(dir, { withFileTypes: true })
   } catch {
     // skip unreadable directories
     return found
@@ -351,17 +352,18 @@ export async function scanAndIndexFile(
   filePath: string,
   sourceVideoId?: string | null
 ): Promise<ScannedTrack | null> {
+  const normalizedPath = path.normalize(filePath)
   // Retry up to 3 times with backoff in case Windows file handle (e.g. from ffmpeg) is still releasing
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      if (!fs.existsSync(filePath)) {
+      if (!fs.existsSync(normalizedPath)) {
         if (attempt < 3) {
           await new Promise((r) => setTimeout(r, 250 * attempt))
           continue
         }
         return null
       }
-      const track = await extractMetadata(filePath)
+      const track = await extractMetadata(normalizedPath)
       if (sourceVideoId) {
         track.sourceVideoId = sourceVideoId
       }

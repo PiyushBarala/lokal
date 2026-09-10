@@ -102,6 +102,7 @@ export interface UpdateStatus {
   transferred?: number
   total?: number
   releaseNotes?: string
+  downloadUrl?: string
   error?: string
   message?: string
 }
