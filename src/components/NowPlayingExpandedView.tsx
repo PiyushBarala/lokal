@@ -508,9 +508,17 @@ export function NowPlayingExpandedView(): React.JSX.Element {
           }`}
         >
           <div
+            onClick={(e) => {
+              e.stopPropagation()
+              togglePlay()
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+            }}
             onMouseMove={handleArtMouseMove}
             onMouseLeave={handleArtMouseLeave}
-            className={`relative rounded-2xl overflow-hidden ring-1 ring-white/15 cursor-pointer select-none transition-all duration-500 ${
+            title={isPlaying ? 'Pause (Click or Space)' : 'Play (Click or Space)'}
+            className={`group/jacket relative rounded-2xl overflow-hidden ring-1 ring-white/15 cursor-pointer select-none transition-all duration-500 no-double-click active:scale-[0.98] ${
               isWidescreen
                 ? 'aspect-video w-[48vh] h-[27vh] min-w-[240px] min-h-[135px] sm:w-[58vh] sm:h-[32.6vh] lg:w-[68vh] lg:h-[38.25vh] max-w-[620px] max-h-[350px]'
                 : 'aspect-square w-[28vh] h-[28vh] min-w-[140px] min-h-[140px] sm:w-[32vh] sm:h-[32vh] lg:w-[42vh] lg:h-[42vh] max-w-[420px] max-h-[420px]'
@@ -560,6 +568,21 @@ export function NowPlayingExpandedView(): React.JSX.Element {
 
             {/* Subtle top edge specular highlight */}
             <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/15 to-transparent pointer-events-none z-10" />
+
+            {/* Play/Pause Hover Feedback Badge */}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/25 opacity-0 group-hover/jacket:opacity-100 transition-opacity duration-200 pointer-events-none z-20">
+              <div className="w-16 h-16 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white shadow-2xl border border-white/20 transform transition-transform group-hover/jacket:scale-100 scale-90">
+                {isPlaying ? (
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" className="ml-1">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
