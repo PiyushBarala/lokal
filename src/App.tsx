@@ -20,6 +20,69 @@ import { NowPlayingExpandedView } from './components/NowPlayingExpandedView'
 import { useLibraryStore } from './stores/libraryStore'
 import { usePlayerStore } from './stores/playerStore'
 import { initGlobalDownloadListener } from './stores/downloadStore'
+import type { UpdateStatus } from './types'
+
+function AppUpdateBanner() {
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
+  const [isDismissed, setIsDismissed] = useState(false)
+
+  useEffect(() => {
+    window.lokal?.updater?.getLastStatus().then(setUpdateStatus).catch(() => {})
+    const unsub = window.lokal?.updater?.onStatus((st) => {
+      setUpdateStatus(st)
+      if (st.type === 'downloaded' || st.type === 'downloading') {
+        setIsDismissed(false)
+      }
+    })
+    return unsub
+  }, [])
+
+  if (isDismissed || !updateStatus) return null
+
+  // Ready to install
+  if (updateStatus.type === 'downloaded') {
+    return (
+      <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[200] bg-[#1ed760] text-black px-4 py-2 rounded-full shadow-2xl flex items-center gap-3 animate-fade-in text-xs font-semibold">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+        </svg>
+        <span>Lokal v{updateStatus.version} downloaded into app!</span>
+        <button
+          onClick={() => window.lokal?.updater?.quitAndInstall()}
+          className="px-3 py-1 bg-black text-white rounded-full hover:bg-[#222] transition-transform active:scale-95 font-bold text-xs shadow-sm"
+        >
+          Restart & Install Now
+        </button>
+        <button
+          onClick={() => setIsDismissed(true)}
+          className="text-black/70 hover:text-black transition-colors ml-1 p-0.5"
+          title="Dismiss"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+          </svg>
+        </button>
+      </div>
+    )
+  }
+
+  // Downloading in background
+  if (updateStatus.type === 'downloading') {
+    return (
+      <div
+        onClick={() => window.dispatchEvent(new CustomEvent('lokal:open-about'))}
+        className="fixed top-12 left-1/2 -translate-x-1/2 z-[200] bg-[#222222]/95 backdrop-blur-md text-white border border-white/15 px-3.5 py-1.5 rounded-full shadow-2xl flex items-center gap-2.5 animate-fade-in text-xs cursor-pointer hover:border-accent/50 transition-all"
+        title="Click to view download progress"
+      >
+        <div className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        <span className="text-[#b3b3b3]">Downloading update in background:</span>
+        <span className="font-mono text-accent font-semibold">{updateStatus.percent ?? 0}%</span>
+      </div>
+    )
+  }
+
+  return null
+}
 
 function ToastNotification() {
   const [toast, setToast] = useState<string | null>(null)
@@ -263,6 +326,7 @@ function AppInner(): React.JSX.Element {
         <NowPlayingBar />
       </div>
       {isExpandedNowPlaying && <NowPlayingExpandedView />}
+      <AppUpdateBanner />
       <ToastNotification />
     </>
   )

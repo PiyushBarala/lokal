@@ -218,22 +218,60 @@ async function checkGitHubReleasesDirectly(isManual = false): Promise<void> {
   })
 }
 
+let isDownloading = false
+
 async function downloadFileWithProgress(url: string, destPath: string, version: string): Promise<void> {
+  if (isDownloading) {
+    console.log('[Updater] Download is already in progress.')
+    return
+  }
+
+  // If already completely downloaded previously
+  if (fs.existsSync(destPath) && fs.statSync(destPath).size > 10 * 1024 * 1024) {
+    console.log('[Updater] Installer already downloaded on disk:', destPath)
+    downloadedFilePath = destPath
+    sendStatus({
+      type: 'downloaded',
+      currentVersion: app.getVersion(),
+      version,
+      percent: 100,
+      message: `Update v${version} ready to install.`,
+    })
+    return
+  }
+
+  isDownloading = true
+
   return new Promise((resolve, reject) => {
     const dir = path.dirname(destPath)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 
-    const fileStream = fs.createWriteStream(destPath)
+    const tempPath = destPath + '.download'
+    if (fs.existsSync(tempPath)) {
+      try {
+        fs.unlinkSync(tempPath)
+      } catch {}
+    }
+
+    const fileStream = fs.createWriteStream(tempPath)
     const startTime = Date.now()
     let lastTime = startTime
     let lastTransferred = 0
     let total = 0
     let transferred = 0
+    let activeReq: any = null
+
+    function cleanup() {
+      isDownloading = false
+      fileStream.close()
+      try {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
+      } catch {}
+    }
 
     function getWithRedirect(targetUrl: string, redirectCount = 0) {
       if (redirectCount > 6) {
-        fileStream.close()
-        fs.unlink(destPath, () => {})
+        cleanup()
         reject(new Error('Too many redirects while downloading update'))
         return
       }
@@ -241,7 +279,7 @@ async function downloadFileWithProgress(url: string, destPath: string, version: 
       const parsedUrl = new URL(targetUrl)
       const protocol = parsedUrl.protocol === 'http:' ? http : https
 
-      const req = protocol.get(
+      activeReq = protocol.get(
         targetUrl,
         {
           headers: {
@@ -259,8 +297,7 @@ async function downloadFileWithProgress(url: string, destPath: string, version: 
 
           if (res.statusCode !== 200) {
             res.resume()
-            fileStream.close()
-            fs.unlink(destPath, () => {})
+            cleanup()
             reject(new Error(`Server responded with HTTP ${res.statusCode}`))
             return
           }
@@ -284,7 +321,7 @@ async function downloadFileWithProgress(url: string, destPath: string, version: 
                 transferred,
                 total,
                 bytesPerSecond,
-                message: `Downloading v${version}: ${percent}%`,
+                message: `Downloading update: ${percent}%`,
               })
 
               lastTime = now
@@ -296,7 +333,19 @@ async function downloadFileWithProgress(url: string, destPath: string, version: 
 
           fileStream.on('finish', () => {
             fileStream.close(() => {
-              downloadedFilePath = destPath
+              isDownloading = false
+              try {
+                if (fs.existsSync(destPath)) {
+                  try {
+                    fs.unlinkSync(destPath)
+                  } catch {}
+                }
+                fs.renameSync(tempPath, destPath)
+              } catch (renameErr) {
+                console.warn('[Updater] Could not rename temp file, using tempPath:', renameErr)
+              }
+
+              downloadedFilePath = fs.existsSync(destPath) ? destPath : tempPath
               sendStatus({
                 type: 'downloaded',
                 currentVersion: app.getVersion(),
@@ -311,23 +360,26 @@ async function downloadFileWithProgress(url: string, destPath: string, version: 
           })
 
           fileStream.on('error', (err) => {
-            fileStream.close(() => {})
-            fs.unlink(destPath, () => {})
+            cleanup()
             reject(err)
           })
 
           res.on('error', (err) => {
-            fileStream.close(() => {})
-            fs.unlink(destPath, () => {})
+            cleanup()
             reject(err)
           })
         }
       )
 
-      req.on('error', (err) => {
-        fileStream.close()
-        fs.unlink(destPath, () => {})
+      activeReq.on('error', (err: any) => {
+        cleanup()
         reject(err)
+      })
+
+      activeReq.setTimeout(45000, () => {
+        activeReq.destroy()
+        cleanup()
+        reject(new Error('Download connection timed out'))
       })
     }
 
@@ -414,7 +466,10 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
 
   // Event: error
   autoUpdater.on('error', async (err: Error) => {
-    console.error('[Updater] autoUpdater error, attempting direct GitHub release check:', err)
+    console.error('[Updater] autoUpdater error:', err)
+    if (lastStatus.type === 'downloading' || lastStatus.type === 'downloaded') {
+      return
+    }
     try {
       await checkGitHubReleasesDirectly(false)
     } catch {
@@ -481,20 +536,10 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
       percent: 0,
       transferred: 0,
       total: lastStatus.total,
-      message: `Starting background download...`,
+      message: `Starting download in background...`,
     })
 
-    // If packaged and electron-updater found the release
-    if (app.isPackaged) {
-      try {
-        await autoUpdater.downloadUpdate()
-        return { success: true }
-      } catch (err: any) {
-        console.log('[Updater] autoUpdater.downloadUpdate not available, falling back to background file downloader:', err?.message)
-      }
-    }
-
-    // Direct background file downloader
+    // Direct in-app background downloader
     try {
       const updatesDir = path.join(app.getPath('userData'), 'updates')
       const fileName = `Lokal-Setup-${version}.exe`
@@ -506,8 +551,7 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
           type: 'error',
           currentVersion: app.getVersion(),
           error: dlErr.message,
-          message: 'Download failed. Click to open browser download.',
-          downloadUrl: exeUrl,
+          message: 'Download failed. Check your connection and try again.',
         })
       })
       return { success: true }
@@ -524,7 +568,7 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
   })
 
   ipcMain.handle('updater:open-url', (_e, url?: string) => {
-    const target = url || lastStatus.releasePageUrl || lastStatus.downloadUrl || 'https://github.com/PiyushBarala/lokal/releases/latest'
+    const target = url || lastStatus.releasePageUrl || 'https://github.com/PiyushBarala/lokal/releases/latest'
     shell.openExternal(target)
     return { success: true }
   })
@@ -538,8 +582,7 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
       }, 1000)
       return { success: true }
     }
-    autoUpdater.quitAndInstall(false, true)
-    return { success: true }
+    return { success: false, error: 'Installer file not found' }
   })
 }
 

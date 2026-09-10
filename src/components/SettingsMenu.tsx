@@ -61,6 +61,13 @@ function AboutModal({ onClose }: { onClose: () => void }) {
   }
 
   const handleStartDownload = async () => {
+    setStatus((prev) => ({
+      type: 'downloading',
+      currentVersion: version,
+      version: prev?.version || 'latest',
+      percent: 0,
+      message: 'Starting download in background...',
+    }))
     try {
       await window.lokal?.updater?.downloadUpdate()
     } catch (e) {
@@ -230,15 +237,9 @@ function AboutModal({ onClose }: { onClose: () => void }) {
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleCheckUpdates}
-                  className="text-[11px] text-white/90 hover:text-white underline"
+                  className="text-[11px] text-accent hover:underline font-medium"
                 >
-                  Retry
-                </button>
-                <button
-                  onClick={() => window.lokal?.updater?.openReleasePage?.()}
-                  className="text-[11px] text-[#b3b3b3] hover:text-white underline"
-                >
-                  View on GitHub
+                  Retry Check
                 </button>
               </div>
             </div>
@@ -320,7 +321,14 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
         )
       }
     })
-    return unsub
+
+    const onOpenAbout = () => setShowAbout(true)
+    window.addEventListener('lokal:open-about', onOpenAbout)
+
+    return () => {
+      unsub?.()
+      window.removeEventListener('lokal:open-about', onOpenAbout)
+    }
   }, [])
 
   const {
