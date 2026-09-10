@@ -25,7 +25,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download yt-dlp and ffmpeg binaries
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force -Path resources/bin
+          Write-Host "Downloading yt-dlp.exe..."
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile "resources/bin/yt-dlp.exe"
+          Write-Host "Downloading ffmpeg.exe..."
+          Invoke-WebRequest -Uri "https://github.com/ffbinaries/ffbinaries-prebuilt/releases/download/v6.1/ffmpeg-6.1-win-64.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "resources/bin" -Force
+          Remove-Item "ffmpeg.zip"
+          Get-ChildItem resources/bin
+
+      - name: Build app
+        run: npm run build
+
       - name: Build and publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --publish always
+
