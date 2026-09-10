@@ -146,12 +146,25 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
  */
 export async function ensureTrackInDownloadsPlaylist(filePath?: string, videoId?: string): Promise<void> {
   try {
-    const allTracks = await window.lokal.db.getTracks()
-    const track = allTracks.find(
+    const normTarget = filePath ? filePath.replace(/\\/g, '/').toLowerCase() : ''
+    let allTracks = await window.lokal.db.getTracks()
+    let track = allTracks.find(
       (t) =>
-        (filePath && t.filePath.toLowerCase() === filePath.toLowerCase()) ||
+        (normTarget && t.filePath.replace(/\\/g, '/').toLowerCase() === normTarget) ||
         (videoId && t.sourceVideoId === videoId)
     )
+
+    // Retry once if DB transaction is still persisting
+    if (!track?.id) {
+      await new Promise((r) => setTimeout(r, 400))
+      allTracks = await window.lokal.db.getTracks()
+      track = allTracks.find(
+        (t) =>
+          (normTarget && t.filePath.replace(/\\/g, '/').toLowerCase() === normTarget) ||
+          (videoId && t.sourceVideoId === videoId)
+      )
+    }
+
     if (!track?.id) return
 
     const playlists = await window.lokal.db.getPlaylists()
@@ -195,14 +208,18 @@ export function initGlobalDownloadListener(): () => void {
     })
 
     if (progress.status === 'completed') {
-      useLibraryStore.getState().loadLibrary().then(async () => {
+      (async () => {
+        if (progress.filePath) {
+          await window.lokal?.library?.scanFile?.(progress.filePath).catch(() => {})
+        }
+        await useLibraryStore.getState().loadLibrary()
         window.dispatchEvent(
           new CustomEvent('lokal:toast', {
             detail: 'Track downloaded and added to Downloads playlist',
           })
         )
         await ensureTrackInDownloadsPlaylist(progress.filePath, progress.videoId)
-      }).catch(console.error)
+      })().catch(console.error)
     }
   })
 

@@ -2,7 +2,8 @@ import { ipcMain, app, dialog, BrowserWindow } from 'electron'
 import { spawn, exec, ChildProcess } from 'node:child_process'
 import * as path from 'node:path'
 import * as fs from 'node:fs'
-import { scanAndIndexFile } from './scanner'
+import { scanAndIndexFile, extractMetadata, type ScannedTrack } from './scanner'
+import { getAllTrackFilePaths, writeTracksToDb } from '../db/dbHandlers'
 
 export interface YtSearchResult {
   id: string
@@ -219,6 +220,14 @@ export function registerYtDlpHandlers(): void {
           '--newline'
         ]
 
+        const startTime = Date.now()
+        const existingBeforeDownload = new Set<string>()
+        try {
+          if (fs.existsSync(outDir)) {
+            fs.readdirSync(outDir).forEach((f) => existingBeforeDownload.add(f.toLowerCase()))
+          }
+        } catch {}
+
         const proc = spawn(ytDlpPath, args, {
           windowsHide: true,
         })
@@ -241,10 +250,10 @@ export function registerYtDlpHandlers(): void {
         const AUDIO_EXTS = ['.mp3', '.m4a', '.opus', '.flac', '.wav', '.ogg', '.aac', '.webm']
 
         const processStdoutLine = (line: string) => {
-          const trimmed = line.trim()
+          const trimmed = line.replace(/[\r\n]+/g, ' ').trim()
           if (!trimmed) return
 
-          // Check if yt-dlp printed the final after_move filepath (direct audio path)
+          // Direct audio path after move
           if (AUDIO_EXTS.some((ext) => trimmed.toLowerCase().endsWith(ext)) && (trimmed.includes(outDir) || path.isAbsolute(trimmed))) {
             resolvedFilePath = path.normalize(trimmed)
             return
@@ -270,7 +279,7 @@ export function registerYtDlpHandlers(): void {
           }
 
           // 2. Check conversion / extraction state
-          if (trimmed.includes('[ExtractAudio]') || trimmed.includes('[Merger]') || trimmed.includes('[Metadata]')) {
+          if (trimmed.includes('[ExtractAudio]') || trimmed.includes('[Merger]') || trimmed.includes('[Metadata]') || trimmed.includes('[EmbedThumbnail]')) {
             event.sender.send('ytdlp:progress', {
               videoId,
               percent: 99,
@@ -281,9 +290,15 @@ export function registerYtDlpHandlers(): void {
           }
 
           // 3. Detect destination file path (accept any audio file, NOT image thumbnails)
-          const destAudioMatch = trimmed.match(/\[(?:ExtractAudio|download)\]\s+Destination:\s+(.+\.(?:mp3|m4a|opus|flac|wav|ogg|aac))$/i)
+          const destAudioMatch = trimmed.match(/\[(?:ExtractAudio|download|Merger)\]\s+(?:Destination:\s+|Merging formats into\s+)"?([^"\r\n]+\.(?:mp3|m4a|opus|flac|wav|ogg|aac))"?/i)
           if (destAudioMatch) {
             resolvedFilePath = path.normalize(destAudioMatch[1].trim())
+            return
+          }
+
+          const embedMatch = trimmed.match(/\[EmbedThumbnail\]\s+ffmpeg:\s+Adding thumbnail to\s+"?([^"\r\n]+\.(?:mp3|m4a|opus|flac|wav|ogg|aac))"?/i)
+          if (embedMatch) {
+            resolvedFilePath = path.normalize(embedMatch[1].trim())
             return
           }
 
@@ -300,7 +315,8 @@ export function registerYtDlpHandlers(): void {
 
         proc.stdout.on('data', (chunk: Buffer) => {
           stdoutBuffer += chunk.toString()
-          const lines = stdoutBuffer.split(/\r?\n/)
+          // Split on both \r\n and bare \r to prevent terminal progress overwrites from breaking line structure
+          const lines = stdoutBuffer.split(/\r\n|[\r\n]/)
           stdoutBuffer = lines.pop() || ''
           for (const line of lines) {
             processStdoutLine(line)
@@ -347,22 +363,31 @@ export function registerYtDlpHandlers(): void {
                 })
                 .filter((f): f is NonNullable<typeof f> => f !== null && f.size > 20000)
 
-              // If title was provided, try matching filename with Unicode words
-              if (title) {
+              // Check for brand new files created during this download session
+              const brandNewFiles = allAudioFiles.filter(
+                (f) => !existingBeforeDownload.has(f.name.toLowerCase())
+              )
+              if (brandNewFiles.length > 0) {
+                brandNewFiles.sort((a, b) => b.time - a.time)
+                finalAudio = brandNewFiles[0].path
+              }
+
+              // If title was provided, try matching filename with full words if not yet found
+              if (!finalAudio && title) {
                 const cleanTitleWords = title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(/\s+/).filter((w) => w.length > 2)
                 const titleMatch = allAudioFiles.find((f) => {
                   const fnLower = f.name.toLowerCase()
-                  return cleanTitleWords.length > 0 && cleanTitleWords.filter((w) => fnLower.includes(w)).length >= Math.min(2, cleanTitleWords.length)
+                  return cleanTitleWords.length > 0 && cleanTitleWords.filter((w) => fnLower.includes(w)).length >= Math.min(3, cleanTitleWords.length)
                 })
                 if (titleMatch) {
                   finalAudio = titleMatch.path
                 }
               }
 
-              // Fallback: take the most recent audio file modified in the last 3 minutes
+              // Fallback: take the most recent audio file modified since download began
               if (!finalAudio) {
                 const recent = allAudioFiles
-                  .filter((f) => Date.now() - f.time < 180000)
+                  .filter((f) => f.time >= startTime - 10000)
                   .sort((a, b) => b.time - a.time)
                 if (recent.length > 0) {
                   finalAudio = recent[0].path
@@ -383,6 +408,9 @@ export function registerYtDlpHandlers(): void {
               } catch (err) {
                 console.error('[yt-dlp download] Failed to index downloaded file:', err)
               }
+            } else {
+              // Safety net: sync entire folder
+              await syncFolderTracks(outDir).catch(console.error)
             }
 
             event.sender.send('ytdlp:progress', {
@@ -568,37 +596,84 @@ export function registerYtDlpHandlers(): void {
 
   // ── 6. Sync entire folder (ensures all downloaded MP3s in directory are indexed) ──
   ipcMain.handle('ytdlp:sync-folder', async (_event, folderPath?: string) => {
-    let outDir = folderPath
-    if (!outDir || !fs.existsSync(outDir)) {
+    return syncFolderTracks(folderPath)
+  })
+}
+
+/**
+ * Fast batch sync of a music / download directory with lokal.db.
+ * Compares files against existing database tracks, parses metadata only for missing tracks,
+ * writes them in a single batch, and notifies all windows.
+ */
+export async function syncFolderTracks(folderPath?: string): Promise<{ synced: number; error?: string }> {
+  let outDir = folderPath
+  if (!outDir || !fs.existsSync(outDir)) {
+    try {
+      outDir = app.getPath('music')
+    } catch {
+      outDir = path.join(app.getPath('userData'), 'downloads')
+    }
+  }
+  if (!fs.existsSync(outDir)) return { synced: 0 }
+
+  try {
+    const AUDIO_EXTS = new Set(['.mp3', '.m4a', '.opus', '.flac', '.wav', '.ogg', '.aac', '.webm'])
+    const allAudioFiles: string[] = []
+
+    const walk = (dir: string) => {
       try {
-        outDir = app.getPath('music')
-      } catch {
-        outDir = path.join(app.getPath('userData'), 'downloads')
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+        for (const entry of entries) {
+          const full = path.join(dir, entry.name)
+          if (entry.isDirectory()) {
+            walk(full)
+          } else if (entry.isFile()) {
+            const ext = path.extname(entry.name).toLowerCase()
+            if (AUDIO_EXTS.has(ext)) {
+              allAudioFiles.push(path.normalize(full))
+            }
+          }
+        }
+      } catch {}
+    }
+
+    walk(outDir)
+
+    const existingPaths = getAllTrackFilePaths()
+    const missingFiles = allAudioFiles.filter((f) => !existingPaths.has(f.toLowerCase()))
+
+    if (missingFiles.length === 0) {
+      return { synced: 0 }
+    }
+
+    console.log(`[syncFolderTracks] Found ${missingFiles.length} missing tracks in ${outDir}. Indexing into library...`)
+    const scannedTracks: (ScannedTrack & { artworkData: Buffer | null })[] = []
+
+    for (const f of missingFiles) {
+      try {
+        const track = await extractMetadata(f)
+        scannedTracks.push(track as (ScannedTrack & { artworkData: Buffer | null }))
+      } catch (err) {
+        console.error(`[syncFolderTracks] Error extracting metadata for ${f}:`, err)
       }
     }
-    if (!fs.existsSync(outDir)) return { synced: 0 }
 
-    try {
-      const AUDIO_EXTS = ['.mp3', '.m4a', '.opus', '.flac', '.wav', '.ogg', '.aac', '.webm']
-      const files = fs.readdirSync(outDir)
-        .filter((f) => AUDIO_EXTS.some((ext) => f.toLowerCase().endsWith(ext)))
-        .map((f) => path.normalize(path.join(outDir!, f)))
+    if (scannedTracks.length > 0) {
+      writeTracksToDb(scannedTracks)
+      console.log(`[syncFolderTracks] Successfully indexed ${scannedTracks.length} tracks into DB`)
 
-      let count = 0
-      for (const filePath of files) {
-        try {
-          const res = await scanAndIndexFile(filePath)
-          if (res) count++
-        } catch (e) {
-          console.error('[ytdlp:sync-folder] Failed to index file:', filePath, e)
+      // Broadcast update to all windows
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('library:tracks-updated')
         }
       }
-      console.log(`[ytdlp:sync-folder] Successfully checked/synced ${count} tracks from ${outDir}`)
-      return { synced: count }
-    } catch (err: any) {
-      console.error('[ytdlp:sync-folder] Error:', err)
-      return { synced: 0, error: err.message }
     }
-  })
+
+    return { synced: scannedTracks.length }
+  } catch (err: any) {
+    console.error('[syncFolderTracks] Error:', err)
+    return { synced: 0, error: err.message }
+  }
 }
 

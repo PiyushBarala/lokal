@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useLibraryStore } from '../stores/libraryStore'
 import { usePlayerStore } from '../stores/playerStore'
 import { ArtworkCell } from '../components/ArtworkCell'
@@ -20,6 +20,10 @@ export function SongsView(): React.JSX.Element {
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayerStore()
   const [sortKey, setSortKey] = useState<SortKey>('artist')
   const [sortAsc, setSortAsc] = useState(true)
+
+  useEffect(() => {
+    loadLibrary().catch(console.error)
+  }, [loadLibrary])
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ track: Track; pos: ContextMenuPosition } | null>(null)

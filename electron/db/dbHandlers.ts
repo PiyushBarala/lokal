@@ -46,6 +46,18 @@ function execRows(sql: string, params: unknown[] = []): Record<string, unknown>[
   return rows
 }
 
+/** Get a Set of all normalized, lowercase file paths currently in the tracks table. */
+export function getAllTrackFilePaths(): Set<string> {
+  const rows = execRows('SELECT file_path FROM tracks')
+  const set = new Set<string>()
+  for (const r of rows) {
+    if (r.file_path) {
+      set.add(path.normalize(r.file_path as string).toLowerCase())
+    }
+  }
+  return set
+}
+
 /** Save artwork buffer to disk and return the file path. */
 function saveArtwork(fileHash: string, data: Buffer, mime: string): string {
   const ext = mime.includes('png') ? 'png' : mime.includes('gif') ? 'gif' : 'jpg'

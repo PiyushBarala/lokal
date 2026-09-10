@@ -290,9 +290,25 @@ function AppInner(): React.JSX.Element {
 
   useEffect(() => {
     loadLibrary().catch(console.error)
+
+    // Listen for background track indexing updates from main process
+    const unsubTracks = window.lokal?.library?.onTracksUpdated?.(() => {
+      loadLibrary().catch(console.error)
+    })
+
+    // Auto-sync download/music folder in background on launch to ensure all downloaded songs appear
+    window.lokal?.ytdlp?.syncFolder?.().then(async (res) => {
+      if (res && res.synced > 0) {
+        await loadLibrary()
+      }
+    }).catch(console.error)
+
     const cleanupDownloads = initGlobalDownloadListener()
-    return () => cleanupDownloads()
-  }, [])
+    return () => {
+      unsubTracks?.()
+      cleanupDownloads()
+    }
+  }, [loadLibrary])
 
   return (
     <>

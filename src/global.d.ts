@@ -38,6 +38,8 @@ declare global {
         pickFolder: () => Promise<string | null>
         scan: (folderPath: string) => Promise<Track[]>
         onScanProgress: (cb: (progress: ScanProgress) => void) => () => void
+        scanFile?: (filePath: string) => Promise<Track | null>
+        onTracksUpdated?: (cb: () => void) => () => void
       }
       db: {
         getTracks: () => Promise<Track[]>

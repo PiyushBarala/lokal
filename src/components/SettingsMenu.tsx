@@ -34,7 +34,7 @@ function formatBytes(bytes?: number): string {
 
 // ── About Modal ───────────────────────────────────────────────────
 function AboutModal({ onClose }: { onClose: () => void }) {
-  const [version, setVersion] = useState('1.1.5')
+  const [version, setVersion] = useState('1.1.6')
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [isChecking, setIsChecking] = useState(false)
 

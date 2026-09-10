@@ -30,6 +30,12 @@ const api = {
   library: {
     pickFolder: () => ipcRenderer.invoke('library:pick-folder'),
     scan: (folderPath: string) => ipcRenderer.invoke('library:scan', folderPath),
+    scanFile: (filePath: string) => ipcRenderer.invoke('library:scan-file', filePath),
+    onTracksUpdated: (cb: () => void) => {
+      const handler = () => cb()
+      ipcRenderer.on('library:tracks-updated', handler)
+      return () => ipcRenderer.removeListener('library:tracks-updated', handler)
+    },
     onScanProgress: (cb: (progress: { current: number; total: number; file: string }) => void) => {
       const handler = (_: Electron.IpcRendererEvent, data: { current: number; total: number; file: string }) => cb(data)
       ipcRenderer.on('library:scan-progress', handler)

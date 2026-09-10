@@ -132,11 +132,22 @@ export function DownloadView(): React.JSX.Element {
   // Automatically add downloaded tracks into the "Downloads" playlist
   const ensureAddedToDownloadsPlaylist = useCallback(async (filePath?: string, videoId?: string) => {
     try {
-      const allTracks = await window.lokal.db.getTracks()
-      const track = allTracks.find(
-        (t) => (filePath && t.filePath.toLowerCase() === filePath.toLowerCase()) ||
+      const normTarget = filePath ? filePath.replace(/\\/g, '/').toLowerCase() : ''
+      let allTracks = await window.lokal.db.getTracks()
+      let track = allTracks.find(
+        (t) => (normTarget && t.filePath.replace(/\\/g, '/').toLowerCase() === normTarget) ||
                (videoId && t.sourceVideoId === videoId)
       )
+
+      if (!track?.id) {
+        await new Promise((r) => setTimeout(r, 400))
+        allTracks = await window.lokal.db.getTracks()
+        track = allTracks.find(
+          (t) => (normTarget && t.filePath.replace(/\\/g, '/').toLowerCase() === normTarget) ||
+                 (videoId && t.sourceVideoId === videoId)
+        )
+      }
+
       if (!track?.id) return
 
       const playlists = await window.lokal.db.getPlaylists()
@@ -331,12 +342,19 @@ export function DownloadView(): React.JSX.Element {
         updateDownload(item.id, { status: 'error', error: res.error })
         return { success: false }
       }
+
+      if (res.filePath) {
+        await window.lokal?.library?.scanFile?.(res.filePath).catch(() => {})
+        await loadLibrary()
+        await ensureAddedToDownloadsPlaylist(res.filePath, item.id)
+      }
+
       return { success: true, filePath: res.filePath }
     } catch (err: any) {
       updateDownload(item.id, { status: 'error', error: err?.message || 'Download failed' })
       return { success: false }
     }
-  }, [targetFolder, addDownload, updateDownload])
+  }, [targetFolder, addDownload, updateDownload, loadLibrary, ensureAddedToDownloadsPlaylist])
 
   const cancelDownload = async (videoId: string) => {
     await window.lokal.ytdlp.cancel(videoId)

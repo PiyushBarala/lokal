@@ -183,7 +183,7 @@ function extractAuthorAndTitle(raw: string): { title: string; artist: string | n
 /**
  * Extract metadata from a single audio file.
  */
-async function extractMetadata(filePath: string): Promise<ScannedTrack> {
+export async function extractMetadata(filePath: string): Promise<ScannedTrack> {
   const filenameBase = path.basename(filePath, path.extname(filePath))
   let meta: import('music-metadata').IAudioMetadata
 

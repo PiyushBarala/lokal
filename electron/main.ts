@@ -3,7 +3,7 @@ import { join, extname, normalize } from 'node:path'
 import fs from 'node:fs'
 import { Readable } from 'node:stream'
 import { registerScannerHandlers } from './ipc/scanner'
-import { registerYtDlpHandlers } from './ipc/ytdlp'
+import { registerYtDlpHandlers, syncFolderTracks } from './ipc/ytdlp'
 import { initDb } from './db/database'
 import { registerDbHandlers } from './db/dbHandlers'
 import { registerUpdaterHandlers, checkForUpdatesQuietly } from './ipc/updater'
@@ -240,6 +240,13 @@ app.whenReady().then(async () => {
   registerScannerHandlers()
   registerDbHandlers()
   registerYtDlpHandlers()
+
+  // Background auto-sync of downloaded music folder on app startup
+  setTimeout(() => {
+    syncFolderTracks().catch((err) => {
+      console.error('[Startup Sync] Failed to sync music folder:', err)
+    })
+  }, 1000)
 
   // Start on startup
   try {
