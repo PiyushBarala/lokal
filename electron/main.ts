@@ -14,45 +14,6 @@ if (process.platform === 'win32') {
 
 const isDev = process.env.NODE_ENV === 'development'
 
-// ── Lightweight JSON settings store ──────────────────────────────────────────
-let _settingsData: Record<string, unknown> = {}
-let _settingsPath = ''
-
-function loadSettings(): void {
-  try {
-    _settingsPath = join(app.getPath('userData'), 'lokal-settings.json')
-    if (fs.existsSync(_settingsPath)) {
-      _settingsData = JSON.parse(fs.readFileSync(_settingsPath, 'utf-8'))
-    }
-  } catch { _settingsData = {} }
-}
-
-function saveSettings(): void {
-  try {
-    if (_settingsPath) {
-      fs.writeFileSync(_settingsPath, JSON.stringify(_settingsData, null, 2), 'utf-8')
-    }
-  } catch {}
-}
-
-function getSetting(key: string): unknown {
-  return key.split('.').reduce<unknown>((obj, k) =>
-    (obj && typeof obj === 'object' ? (obj as Record<string, unknown>)[k] : undefined), _settingsData)
-}
-
-function setSetting(key: string, value: unknown): void {
-  const parts = key.split('.')
-  let obj = _settingsData
-  for (let i = 0; i < parts.length - 1; i++) {
-    if (!(parts[i] in obj) || typeof obj[parts[i]] !== 'object') {
-      obj[parts[i]] = {}
-    }
-    obj = obj[parts[i]] as Record<string, unknown>
-  }
-  obj[parts[parts.length - 1]] = value
-  saveSettings()
-}
-
 
 function getAppIcon(): nativeImage | string {
   const candidates = [
@@ -295,14 +256,9 @@ app.whenReady().then(async () => {
   })
 
   await initDb()
-  loadSettings()
   registerScannerHandlers()
   registerDbHandlers()
   registerYtDlpHandlers()
-
-  // Settings IPC
-  ipcMain.handle('settings:get', (_e, key: string) => getSetting(key))
-  ipcMain.handle('settings:set', (_e, key: string, value: unknown) => { setSetting(key, value) })
 
   // Background auto-sync of downloaded music folder on app startup
   setTimeout(() => {
