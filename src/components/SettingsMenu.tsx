@@ -5,6 +5,8 @@ import { useLibraryStore } from '../stores/libraryStore'
 import { seekAudio } from './AudioEngine'
 import lokalLogo from '../../public/lokal.png'
 import type { UpdateStatus } from '../types'
+import { useAppSettings, ACCENT_COLORS } from '../contexts/AppSettingsContext'
+import type { ArtworkShape, AccentColor } from '../contexts/AppSettingsContext'
 
 // ── Zoom management ───────────────────────────────────────────────
 let currentZoom = 1.0
@@ -34,7 +36,7 @@ function formatBytes(bytes?: number): string {
 
 // ── About Modal ───────────────────────────────────────────────────
 function AboutModal({ onClose }: { onClose: () => void }) {
-  const [version, setVersion] = useState('1.1.6')
+  const [version, setVersion] = useState('...')
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [isChecking, setIsChecking] = useState(false)
 
@@ -282,6 +284,191 @@ function AboutModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// ── Settings Modal (Customization) ────────────────────────────────
+function SettingsModal({ onClose }: { onClose: () => void }) {
+  const { settings, updateSetting } = useAppSettings()
+  const [autoStart, setAutoStart] = useState<boolean>(settings.autoStartOnLogin)
+  const [loadingAutoStart, setLoadingAutoStart] = useState(false)
+
+  // Load real auto-start state from Electron on mount
+  useEffect(() => {
+    window.lokal?.settings?.get('ui.autoStartOnLogin').then((val: unknown) => {
+      if (typeof val === 'boolean') setAutoStart(val)
+    }).catch(() => {})
+    // Also read from OS settings
+    window.lokal?.window?.minimize?.() // dummy warmup
+  }, [])
+
+  const handleAutoStartToggle = async () => {
+    setLoadingAutoStart(true)
+    const next = !autoStart
+    try {
+      // Update Electron login item
+      await (window.lokal as any)?.app?.setAutostart?.(next)
+      // Persist preference to settings store
+      updateSetting('autoStartOnLogin', next)
+      setAutoStart(next)
+    } catch {
+      // Fallback: just save the preference
+      updateSetting('autoStartOnLogin', next)
+      setAutoStart(next)
+    } finally {
+      setLoadingAutoStart(false)
+    }
+  }
+
+  const shapes: { id: ArtworkShape; label: string; preview: string }[] = [
+    { id: 'square',  label: 'Square',  preview: 'rounded-none' },
+    { id: 'rounded', label: 'Rounded', preview: 'rounded-lg' },
+    { id: 'circle',  label: 'Circle',  preview: 'rounded-full' },
+  ]
+
+  return (
+    <div
+      className="fixed inset-0 z-[300] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#1a1a1a] border border-white/12 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-white/8">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" className="text-accent">
+                <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+              </svg>
+            </div>
+            <h2 className="text-base font-bold text-white">Settings</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-[#b3b3b3] hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
+
+          {/* ── Artwork Shape ── */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#888] mb-3">Artwork Shape</p>
+            <div className="grid grid-cols-3 gap-3">
+              {shapes.map(({ id, label, preview }) => (
+                <button
+                  key={id}
+                  onClick={() => updateSetting('artworkShape', id)}
+                  className={`flex flex-col items-center gap-2.5 p-3 rounded-xl border-2 transition-all ${
+                    settings.artworkShape === id
+                      ? 'border-accent bg-accent/10'
+                      : 'border-white/10 bg-white/5 hover:border-white/25 hover:bg-white/8'
+                  }`}
+                >
+                  <div
+                    className={`w-12 h-12 bg-gradient-to-br from-[#535353] to-[#282828] ${preview} ${
+                      id === 'circle' && settings.artworkShape === 'circle' ? 'animate-spin-slow' : ''
+                    }`}
+                    style={{ background: 'linear-gradient(135deg, #535353, #282828)' }}
+                  />
+                  <span className={`text-xs font-semibold ${
+                    settings.artworkShape === id ? 'text-accent' : 'text-[#b3b3b3]'
+                  }`}>{label}</span>
+                  {id === 'circle' && (
+                    <span className="text-[10px] text-[#888] -mt-1.5">spins while playing</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Accent Color ── */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#888] mb-3">Accent Color</p>
+            <div className="flex gap-3 flex-wrap">
+              {(Object.entries(ACCENT_COLORS) as [AccentColor, { hex: string; hover: string; label: string }][]).map(([id, def]) => (
+                <button
+                  key={id}
+                  onClick={() => updateSetting('accentColor', id)}
+                  title={def.label}
+                  className={`w-9 h-9 rounded-full border-2 transition-all hover:scale-110 active:scale-95 ${
+                    settings.accentColor === id
+                      ? 'border-white scale-110 shadow-lg'
+                      : 'border-transparent'
+                  }`}
+                  style={{ background: def.hex, boxShadow: settings.accentColor === id ? `0 0 12px ${def.hex}80` : undefined }}
+                />
+              ))}
+            </div>
+            <p className="text-xs text-[#535353] mt-2">
+              Currently: <span className="text-[#b3b3b3] font-medium">{ACCENT_COLORS[settings.accentColor].label}</span>
+            </p>
+          </div>
+
+          {/* ── Background Blur (Expanded View) ── */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold uppercase tracking-widest text-[#888]">Expanded View Blur</p>
+              <span className="text-xs font-mono text-accent font-semibold">{settings.expandedBlur}px</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="24"
+              step="2"
+              value={settings.expandedBlur}
+              onChange={(e) => updateSetting('expandedBlur', Number(e.target.value))}
+              className="w-full h-1.5 rounded-full appearance-none bg-white/15 accent-[var(--accent)] cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-[#535353] mt-1">
+              <span>None</span>
+              <span>Max</span>
+            </div>
+          </div>
+
+          {/* ── System ── */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#888] mb-3">System</p>
+            <div className="flex items-center justify-between p-3.5 bg-white/5 rounded-xl border border-white/8">
+              <div>
+                <p className="text-sm font-semibold text-white">Launch at startup</p>
+                <p className="text-xs text-[#888] mt-0.5">Open Lokal automatically when Windows starts</p>
+              </div>
+              <button
+                onClick={handleAutoStartToggle}
+                disabled={loadingAutoStart}
+                className={`relative w-11 h-6 rounded-full transition-all flex-shrink-0 ml-4 ${
+                  autoStart ? 'bg-accent' : 'bg-white/20'
+                } ${loadingAutoStart ? 'opacity-50' : ''}`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                    autoStart ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-white/8">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-full bg-white hover:bg-[#e6e6e6] text-black font-bold text-sm transition-transform active:scale-95"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Icons ─────────────────────────────────────────────────────────
 const ChevronRight = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" className="text-[#b3b3b3] ml-auto">
@@ -305,6 +492,7 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
   const [isOpen, setIsOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState<MenuCategory>(null)
   const [showAbout, setShowAbout] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -710,6 +898,19 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
                       </span>
                     ) : null}
                   </div>
+                  <div className="border-t border-[#3e3e3e] my-1" />
+                  <div
+                    onClick={() => {
+                      closeMenu()
+                      setShowSettings(true)
+                    }}
+                    className="px-3 py-1.5 flex items-center gap-2 hover:bg-[#333333] hover:text-white cursor-pointer text-accent font-semibold"
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
+                      <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+                    </svg>
+                    <span>Settings &amp; Customisation</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -718,6 +919,7 @@ export function SettingsMenu({ onPickFolder }: SettingsMenuProps): React.JSX.Ele
       </div>
 
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </>
   )
 }

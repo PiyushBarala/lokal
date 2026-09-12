@@ -4,6 +4,7 @@ import { seekAudio } from './AudioEngine'
 import { AddToPlaylistModal } from './AddToPlaylistModal'
 import { WindowControls } from './WindowControls'
 import { getGradientPalette } from '../utils/colorExtractor'
+import { useAppSettings } from '../contexts/AppSettingsContext'
 
 function formatTime(s: number): string {
   if (!isFinite(s) || isNaN(s)) return '0:00'
@@ -13,6 +14,8 @@ function formatTime(s: number): string {
 }
 
 export function NowPlayingExpandedView(): React.JSX.Element {
+  const { settings } = useAppSettings()
+
   const {
     currentTrack,
     isPlaying,
@@ -353,7 +356,7 @@ export function NowPlayingExpandedView(): React.JSX.Element {
               alt=""
               className="w-full h-full object-cover select-none pointer-events-none transition-all duration-1000"
               style={{
-                filter: 'blur(50px) saturate(1.4) brightness(0.65)',
+                filter: `blur(${Math.max(20, settings.expandedBlur * 3)}px) saturate(1.4) brightness(0.65)`,
                 transform: 'scale(1.15)',
               }}
             />

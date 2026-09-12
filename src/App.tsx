@@ -7,7 +7,9 @@ import { QueuePanel } from './components/QueuePanel'
 import { TopNav } from './components/TopNav'
 import { zoomIn, zoomOut, resetZoom } from './components/SettingsMenu'
 import { GlobalContextMenu } from './components/ContextMenu'
+import { ConfirmDialogProvider } from './components/ConfirmDialog'
 import { PlayerStateBroadcaster } from './components/PlayerStateBroadcaster'
+import { AppSettingsProvider } from './contexts/AppSettingsContext'
 import { HomeView } from './views/HomeView'
 import { SongsView } from './views/SongsView'
 import { AlbumsView } from './views/AlbumsView'
@@ -366,8 +368,11 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <HashRouter>
-      <AppInner />
-    </HashRouter>
+    <AppSettingsProvider>
+      <ConfirmDialogProvider />
+      <HashRouter>
+        <AppInner />
+      </HashRouter>
+    </AppSettingsProvider>
   )
 }

@@ -5,6 +5,7 @@ import type { Track, Playlist } from '../types'
 import { usePlayerStore } from '../stores/playerStore'
 import { useLibraryStore } from '../stores/libraryStore'
 import { useContextMenuStore } from '../stores/contextMenuStore'
+import { showConfirm } from './ConfirmDialog'
 
 export interface ContextMenuPosition {
   x: number
@@ -153,10 +154,17 @@ export function ContextMenu({ track, position, onClose, onEditMetadata, onTrackU
 
   const handleRemoveFromLibrary = async () => {
     if (!track.id) return
-    if (!confirm(`Remove "${track.title}" from your library?`)) return
+    onClose()
+    const confirmed = await showConfirm({
+      title: 'Remove from library',
+      message: `Remove "${track.title}" from your library? This cannot be undone.`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      danger: true,
+    })
+    if (!confirmed) return
     await window.lokal.db.removeTrack(track.id)
     onTrackUpdated?.()
-    onClose()
   }
 
   const userPlaylists = playlists.filter((p) => p.id !== 1)

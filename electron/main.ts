@@ -14,6 +14,46 @@ if (process.platform === 'win32') {
 
 const isDev = process.env.NODE_ENV === 'development'
 
+// ── Lightweight JSON settings store ──────────────────────────────────────────
+let _settingsData: Record<string, unknown> = {}
+let _settingsPath = ''
+
+function loadSettings(): void {
+  try {
+    _settingsPath = join(app.getPath('userData'), 'lokal-settings.json')
+    if (fs.existsSync(_settingsPath)) {
+      _settingsData = JSON.parse(fs.readFileSync(_settingsPath, 'utf-8'))
+    }
+  } catch { _settingsData = {} }
+}
+
+function saveSettings(): void {
+  try {
+    if (_settingsPath) {
+      fs.writeFileSync(_settingsPath, JSON.stringify(_settingsData, null, 2), 'utf-8')
+    }
+  } catch {}
+}
+
+function getSetting(key: string): unknown {
+  return key.split('.').reduce<unknown>((obj, k) =>
+    (obj && typeof obj === 'object' ? (obj as Record<string, unknown>)[k] : undefined), _settingsData)
+}
+
+function setSetting(key: string, value: unknown): void {
+  const parts = key.split('.')
+  let obj = _settingsData
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (!(parts[i] in obj) || typeof obj[parts[i]] !== 'object') {
+      obj[parts[i]] = {}
+    }
+    obj = obj[parts[i]] as Record<string, unknown>
+  }
+  obj[parts[parts.length - 1]] = value
+  saveSettings()
+}
+
+
 function getAppIcon(): nativeImage | string {
   const candidates = [
     join(process.resourcesPath, 'icon.ico'),
@@ -97,15 +137,31 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('maximize', () => mainWindow?.webContents.send('window:maximized-change', true))
-  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window:maximized-change', false))
+  mainWindow.on('maximize', () => {
+    if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('window:maximized-change', true)
+  })
+  mainWindow.on('unmaximize', () => {
+    if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send('window:maximized-change', false)
+  })
   mainWindow.on('enter-full-screen', () => {
-    mainWindow?.webContents.send('window:fullscreen-change', true)
-    mainWindow?.webContents.send('window:maximized-change', true)
+    if (!mainWindow?.isDestroyed()) {
+      mainWindow?.webContents.send('window:fullscreen-change', true)
+      mainWindow?.webContents.send('window:maximized-change', true)
+    }
   })
   mainWindow.on('leave-full-screen', () => {
-    mainWindow?.webContents.send('window:fullscreen-change', false)
-    mainWindow?.webContents.send('window:maximized-change', mainWindow?.isMaximized() ?? false)
+    if (!mainWindow?.isDestroyed()) {
+      mainWindow?.webContents.send('window:fullscreen-change', false)
+      mainWindow?.webContents.send('window:maximized-change', mainWindow?.isMaximized() ?? false)
+    }
+  })
+  // When main window is about to close, gracefully shut down mini player first
+  mainWindow.on('close', () => {
+    if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) {
+      miniPlayerWindow.removeAllListeners('closed')
+      miniPlayerWindow.close()
+      miniPlayerWindow = null
+    }
   })
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
@@ -157,8 +213,10 @@ function createMiniPlayer(): void {
 
   miniPlayerWindow.on('closed', () => {
     miniPlayerWindow = null
-    // Notify main window so it can update its button state
-    mainWindow?.webContents.send('miniplayer:closed')
+    // Notify main window so it can update its button state (guard against destroyed)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('miniplayer:closed')
+    }
   })
 
   // Load the same renderer with the miniplayer hash route
@@ -237,9 +295,14 @@ app.whenReady().then(async () => {
   })
 
   await initDb()
+  loadSettings()
   registerScannerHandlers()
   registerDbHandlers()
   registerYtDlpHandlers()
+
+  // Settings IPC
+  ipcMain.handle('settings:get', (_e, key: string) => getSetting(key))
+  ipcMain.handle('settings:set', (_e, key: string, value: unknown) => { setSetting(key, value) })
 
   // Background auto-sync of downloaded music folder on app startup
   setTimeout(() => {
@@ -325,7 +388,9 @@ app.whenReady().then(async () => {
 
   // Commands: mini player window → main process → main window
   ipcMain.handle('miniplayer:command', (_e, cmd: { type: string; payload?: unknown }) => {
-    mainWindow?.webContents.send('miniplayer:execute', cmd)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('miniplayer:execute', cmd)
+    }
   })
 
   createWindow()

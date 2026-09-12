@@ -16,6 +16,10 @@
   --color-text-subdued:  #535353;
   --color-border:        #282828;
 
+  /* Dynamic accent — overridden by AppSettingsContext at runtime */
+  --accent:       #1db954;
+  --accent-hover: #1ed760;
+
   /* Layout */
   --sidebar-width:        240px;
   --nowplaying-height:    90px;
