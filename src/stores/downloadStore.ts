@@ -142,31 +142,38 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 }))
 
 /**
- * Automatically add downloaded track into the "Downloads" playlist
+ * Automatically add downloaded track into the "Downloads" playlist.
+ * Retries up to 3 times to handle DB write lag after download completion.
  */
 export async function ensureTrackInDownloadsPlaylist(filePath?: string, videoId?: string): Promise<void> {
-  try {
-    const normTarget = filePath ? filePath.replace(/\\/g, '/').toLowerCase() : ''
-    let allTracks = await window.lokal.db.getTracks()
-    let track = allTracks.find(
+  const normTarget = filePath ? filePath.replace(/\\/g, '/').toLowerCase() : ''
+
+  const findTrack = async () => {
+    const allTracks = await window.lokal.db.getTracks()
+    return allTracks.find(
       (t) =>
         (normTarget && t.filePath.replace(/\\/g, '/').toLowerCase() === normTarget) ||
         (videoId && t.sourceVideoId === videoId)
     )
+  }
 
-    // Retry once if DB transaction is still persisting
-    if (!track?.id) {
-      await new Promise((r) => setTimeout(r, 400))
-      allTracks = await window.lokal.db.getTracks()
-      track = allTracks.find(
-        (t) =>
-          (normTarget && t.filePath.replace(/\\/g, '/').toLowerCase() === normTarget) ||
-          (videoId && t.sourceVideoId === videoId)
-      )
+  let track = await findTrack().catch(() => undefined)
+
+  // Retry up to 3 times with increasing delays if track not yet persisted
+  for (let attempt = 1; attempt <= 3 && !track?.id; attempt++) {
+    await new Promise((r) => setTimeout(r, attempt * 500))
+    track = await findTrack().catch(() => undefined)
+    if (track?.id) {
+      console.log(`[DownloadStore] Found track on retry #${attempt}`)
     }
+  }
 
-    if (!track?.id) return
+  if (!track?.id) {
+    console.warn('[DownloadStore] Track not found in DB after 3 retries; skipping Downloads playlist insert')
+    return
+  }
 
+  try {
     const playlists = await window.lokal.db.getPlaylists()
     let downloadsPlaylist = playlists.find((p) => p.name.trim().toLowerCase() === 'downloads')
     if (!downloadsPlaylist) {
@@ -174,16 +181,18 @@ export async function ensureTrackInDownloadsPlaylist(filePath?: string, videoId?
     }
     if (downloadsPlaylist?.id) {
       const existingTracks = await window.lokal.db.getPlaylistTracks(downloadsPlaylist.id)
-      const alreadyIn = existingTracks.some((t) => t.id === track.id)
+      const alreadyIn = existingTracks.some((t) => t.id === track!.id)
       if (!alreadyIn) {
         await window.lokal.db.addTrackToPlaylist(downloadsPlaylist.id, track.id)
         await useLibraryStore.getState().refreshPlaylists()
+        console.log(`[DownloadStore] Added "${track.title}" to Downloads playlist`)
       }
     }
   } catch (err) {
     console.error('[DownloadStore] Failed to add track to Downloads playlist:', err)
   }
 }
+
 
 /**
  * Global IPC progress listener — initialized once at the application level

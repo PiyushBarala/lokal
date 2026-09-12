@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from 'react'
+import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useLibraryStore } from '../stores/libraryStore'
 import { usePlayerStore } from '../stores/playerStore'
@@ -36,6 +36,11 @@ const PlaylistIcon = () => (
   </svg>
 )
 
+const SIDEBAR_WIDTH_KEY = 'lokal_sidebar_width'
+const SIDEBAR_MIN = 180
+const SIDEBAR_MAX = 420
+const SIDEBAR_DEFAULT = 256
+
 type FilterTab = 'all' | 'playlists' | 'artists' | 'downloaded'
 
 export function Sidebar(): React.JSX.Element {
@@ -49,6 +54,51 @@ export function Sidebar(): React.JSX.Element {
   const [creatingNew, setCreatingNew] = useState(false)
   const [newName, setNewName] = useState('')
   const newInputRef = useRef<HTMLInputElement>(null)
+
+  // ── Draggable width ──────────────────────────────────────────
+  const [width, setWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY)
+      if (saved) {
+        const n = parseInt(saved, 10)
+        if (!isNaN(n) && n >= SIDEBAR_MIN && n <= SIDEBAR_MAX) return n
+      }
+    } catch {}
+    return SIDEBAR_DEFAULT
+  })
+  const [isDragging, setIsDragging] = useState(false)
+  const dragStartX = useRef(0)
+  const dragStartWidth = useRef(0)
+
+  const onDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragStartX.current = e.clientX
+    dragStartWidth.current = width
+    setIsDragging(true)
+  }, [width])
+
+  useEffect(() => {
+    if (!isDragging) return
+    const onMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - dragStartX.current
+      const newWidth = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, dragStartWidth.current + delta))
+      setWidth(newWidth)
+    }
+    const onMouseUp = () => {
+      setIsDragging(false)
+      setWidth((w) => {
+        try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w)) } catch {}
+        return w
+      })
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [isDragging])
 
   const startNew = () => {
     setNewName('')
@@ -83,7 +133,10 @@ export function Sidebar(): React.JSX.Element {
   const q = searchFilter.toLowerCase().trim()
 
   return (
-    <aside className="w-64 lg:w-72 flex-shrink-0 bg-[#121212] rounded-lg border border-white/5 flex flex-col overflow-hidden select-none">
+    <aside
+      className="flex-shrink-0 bg-[#121212] rounded-lg border border-white/5 flex flex-col overflow-hidden select-none relative"
+      style={{ width, minWidth: SIDEBAR_MIN, maxWidth: SIDEBAR_MAX }}
+    >
       {/* ── Top Quick Link: Download ── */}
       <div className="px-3 pt-3 pb-2 border-b border-white/5 flex flex-col gap-1 flex-shrink-0">
         <NavLink
@@ -249,6 +302,18 @@ export function Sidebar(): React.JSX.Element {
                 <span>{tracks.filter((t) => t.liked).length} songs</span>
               </div>
             </div>
+            {/* Playing indicator */}
+            {currentTrack && tracks.filter((t) => t.liked).some((t) => t.id === currentTrack.id) && isPlaying && (
+              <div className="flex gap-0.5 items-end flex-shrink-0 h-4">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="w-0.5 bg-accent rounded-full animate-equalizer"
+                    style={{ animationDelay: `${i * 0.15}s`, height: `${8 + i * 3}px` }}
+                  />
+                ))}
+              </div>
+            )}
           </NavLink>
         )}
 
@@ -278,35 +343,38 @@ export function Sidebar(): React.JSX.Element {
         {(filter === 'all' || filter === 'playlists') &&
           userPlaylists
             .filter((pl) => !q || pl.name.toLowerCase().includes(q))
-            .map((pl) => (
-              <NavLink
-                key={pl.id}
-                to={`/playlist/${pl.id}`}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 p-2 rounded-md transition-all group ${
-                    isActive ? 'bg-[#282828]' : 'hover:bg-[#1a1a1a]'
-                  }`
-                }
-              >
-                {pl.artworkPath ? (
-                  <img
-                    src={'lokal://media/' + pl.artworkPath.replace(/\\/g, '/')}
-                    alt=""
-                    className="w-12 h-12 rounded object-cover flex-shrink-0 shadow-sm"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded bg-[#282828] group-hover:bg-[#333] flex items-center justify-center flex-shrink-0 text-[#b3b3b3] transition-colors">
-                    <PlaylistIcon />
+            .map((pl) => {
+              const isCurrentPlayingInPlaylist = false // Would need playlist tracks to check
+              return (
+                <NavLink
+                  key={pl.id}
+                  to={`/playlist/${pl.id}`}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 p-2 rounded-md transition-all group ${
+                      isActive ? 'bg-[#282828]' : 'hover:bg-[#1a1a1a]'
+                    }`
+                  }
+                >
+                  {pl.artworkPath ? (
+                    <img
+                      src={'lokal://media/' + pl.artworkPath.replace(/\\/g, '/')}
+                      alt=""
+                      className="w-12 h-12 rounded object-cover flex-shrink-0 shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded bg-[#282828] group-hover:bg-[#333] flex items-center justify-center flex-shrink-0 text-[#b3b3b3] transition-colors">
+                      <PlaylistIcon />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white truncate">{pl.name}</p>
+                    <p className="text-xs text-[#b3b3b3] mt-0.5 truncate">
+                      Playlist • {pl.trackCount ? `${pl.trackCount} ${pl.trackCount === 1 ? 'song' : 'songs'}` : 'Lokal'}
+                    </p>
                   </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-white truncate">{pl.name}</p>
-                  <p className="text-xs text-[#b3b3b3] mt-0.5 truncate">
-                    Playlist • {pl.trackCount ? `${pl.trackCount} ${pl.trackCount === 1 ? 'song' : 'songs'}` : 'Lokal'}
-                  </p>
-                </div>
-              </NavLink>
-            ))}
+                </NavLink>
+              )
+            })}
 
         {/* 4. Artists */}
         {(filter === 'all' || filter === 'artists') &&
@@ -331,6 +399,25 @@ export function Sidebar(): React.JSX.Element {
               </div>
             ))}
       </div>
+
+      {/* ── Drag Handle ─────────────────────────────────────────── */}
+      <div
+        onMouseDown={onDragHandleMouseDown}
+        className="absolute top-0 right-0 w-1 h-full cursor-col-resize group z-10"
+        title="Drag to resize"
+      >
+        {/* Visible indicator line */}
+        <div
+          className={`absolute inset-y-0 right-0 w-px transition-all duration-150 ${
+            isDragging ? 'bg-accent w-0.5 shadow-[0_0_6px_rgba(29,185,84,0.6)]' : 'bg-transparent group-hover:bg-accent/40'
+          }`}
+        />
+      </div>
+
+      {/* Global drag cursor overlay when dragging */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 cursor-col-resize" style={{ pointerEvents: 'all' }} />
+      )}
     </aside>
   )
 }

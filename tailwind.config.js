@@ -18,14 +18,19 @@ module.exports = {
         sans: ['Inter', 'system-ui', 'sans-serif']
       },
       animation: {
-        'spin-slow': 'spin 4s linear infinite',
-        'fade-in':   'fadeIn 0.2s ease-in-out'
+        'spin-slow':  'spin 4s linear infinite',
+        'fade-in':    'fadeIn 0.2s ease-in-out',
+        'equalizer':  'equalizer 0.8s ease-in-out infinite alternate',
       },
       keyframes: {
         fadeIn: {
           '0%':   { opacity: '0', transform: 'translateY(4px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' }
-        }
+        },
+        equalizer: {
+          '0%':   { transform: 'scaleY(0.4)' },
+          '100%': { transform: 'scaleY(1.0)' },
+        },
       }
     }
   },

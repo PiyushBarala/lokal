@@ -573,13 +573,23 @@ export function registerUpdaterHandlers(win: BrowserWindow | null): void {
     return { success: true }
   })
 
-  ipcMain.handle('updater:install', () => {
+  ipcMain.handle('updater:install', async () => {
     if (downloadedFilePath && fs.existsSync(downloadedFilePath)) {
       console.log('[Updater] Launching downloaded installer:', downloadedFilePath)
-      shell.openPath(downloadedFilePath)
+      const installerPath = downloadedFilePath
+      await shell.openPath(installerPath)
+      // Delete the installer file after launching (Windows may still use it briefly)
       setTimeout(() => {
+        try {
+          if (fs.existsSync(installerPath)) {
+            fs.unlinkSync(installerPath)
+            console.log('[Updater] Cleaned up installer:', installerPath)
+          }
+        } catch (e) {
+          console.warn('[Updater] Could not delete installer (will retry on next launch):', e)
+        }
         app.quit()
-      }, 1000)
+      }, 2500)
       return { success: true }
     }
     return { success: false, error: 'Installer file not found' }
@@ -599,5 +609,30 @@ export async function checkForUpdatesQuietly(): Promise<void> {
     if (errStr.includes('404') || errStr.includes('latest.yml')) {
       await checkGitHubReleasesDirectly(false)
     }
+  }
+}
+
+/**
+ * Called on app startup to clean up any leftover installer files from previous update sessions.
+ * This handles the case where deletion failed after the installer was launched.
+ */
+export function cleanupOldInstallers(): void {
+  try {
+    const updatesDir = path.join(app.getPath('userData'), 'updates')
+    if (!fs.existsSync(updatesDir)) return
+    const files = fs.readdirSync(updatesDir)
+    for (const f of files) {
+      if (f.toLowerCase().endsWith('.exe') || f.toLowerCase().endsWith('.exe.download')) {
+        try {
+          const filePath = path.join(updatesDir, f)
+          fs.unlinkSync(filePath)
+          console.log('[Updater] Cleaned up old installer on startup:', filePath)
+        } catch {
+          // File may still be in use; ignore
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Updater] cleanupOldInstallers error:', e)
   }
 }

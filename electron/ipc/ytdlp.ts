@@ -408,6 +408,8 @@ export function registerYtDlpHandlers(): void {
               } catch (err) {
                 console.error('[yt-dlp download] Failed to index downloaded file:', err)
               }
+              // Also sync the folder to catch any edge cases or concurrent downloads
+              syncFolderTracks(outDir).catch(console.error)
             } else {
               // Safety net: sync entire folder
               await syncFolderTracks(outDir).catch(console.error)

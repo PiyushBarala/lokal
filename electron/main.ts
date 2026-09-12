@@ -6,7 +6,7 @@ import { registerScannerHandlers } from './ipc/scanner'
 import { registerYtDlpHandlers, syncFolderTracks } from './ipc/ytdlp'
 import { initDb } from './db/database'
 import { registerDbHandlers } from './db/dbHandlers'
-import { registerUpdaterHandlers, checkForUpdatesQuietly } from './ipc/updater'
+import { registerUpdaterHandlers, checkForUpdatesQuietly, cleanupOldInstallers } from './ipc/updater'
 
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.lokal.music')
@@ -248,15 +248,20 @@ app.whenReady().then(async () => {
     })
   }, 1000)
 
-  // Start on startup
-  try {
-    app.setLoginItemSettings({
-      openAtLogin: true,
-      path: process.execPath,
-    })
-    console.log('[AutoLaunch] Configured openAtLogin: true for:', process.execPath)
-  } catch (err) {
-    console.error('[AutoLaunch] Failed to set login item settings:', err)
+  // Clean up leftover installer files from a previous update session
+  cleanupOldInstallers()
+
+  // Auto-start on login — only in packaged production builds, not during development
+  if (app.isPackaged) {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: true,
+        path: process.execPath,
+      })
+      console.log('[AutoLaunch] Configured openAtLogin: true for:', process.execPath)
+    } catch (err) {
+      console.error('[AutoLaunch] Failed to set login item settings:', err)
+    }
   }
 
   ipcMain.handle('app:get-autostart', () => {
