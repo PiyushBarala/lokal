@@ -11,7 +11,7 @@ function gainToPercent(gain: number): number {
 const PowerIcon = ({ active }: { active: boolean }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"
     className={active ? 'text-accent' : 'text-[#888]'}>
-    <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/>
+    <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z" />
   </svg>
 )
 
@@ -47,7 +47,7 @@ function EqBand({
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!enabled) return
     isDragging.current = true
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      ; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     onChange(index, getGainFromY(e.clientY))
   }
 
@@ -58,7 +58,7 @@ function EqBand({
 
   const handlePointerUp = (e: React.PointerEvent) => {
     isDragging.current = false
-    ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+      ; (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
   }
 
   const fillPct = gainToPercent(gain)
@@ -73,9 +73,8 @@ function EqBand({
   return (
     <div className="flex flex-col items-center gap-1.5 select-none" style={{ width: 36 }}>
       {/* dB value label */}
-      <span className={`text-[10px] font-mono tabular-nums w-full text-center ${
-        gain > 0 ? 'text-accent' : gain < 0 ? 'text-[#ff6b6b]' : 'text-[#666]'
-      }`}>
+      <span className={`text-[10px] font-mono tabular-nums w-full text-center ${gain > 0 ? 'text-accent' : gain < 0 ? 'text-[#ff6b6b]' : 'text-[#666]'
+        }`}>
         {gain > 0 ? `+${gain.toFixed(1)}` : gain.toFixed(1)}
       </span>
 
@@ -85,9 +84,8 @@ function EqBand({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        className={`relative w-3 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] ${
-          enabled ? 'cursor-ns-resize' : 'cursor-not-allowed opacity-40'
-        }`}
+        className={`relative w-3 rounded-full bg-[#1e1e1e] border border-[#2a2a2a] ${enabled ? 'cursor-ns-resize' : 'cursor-not-allowed opacity-40'
+          }`}
         style={{ height: 140 }}
         title={`${freq >= 1000 ? freq / 1000 + 'kHz' : freq + 'Hz'}: ${gain > 0 ? '+' : ''}${gain.toFixed(1)} dB`}
       >
@@ -99,9 +97,8 @@ function EqBand({
 
         {/* Fill from zero to current position */}
         <div
-          className={`absolute left-0 right-0 rounded-full pointer-events-none transition-all duration-75 ${
-            gain >= 0 ? 'bg-accent/70' : 'bg-[#ff6b6b]/60'
-          }`}
+          className={`absolute left-0 right-0 rounded-full pointer-events-none transition-all duration-75 ${gain >= 0 ? 'bg-accent/70' : 'bg-[#ff6b6b]/60'
+            }`}
           style={{
             top: `${fillTop}%`,
             height: `${fillHeight}%`,
@@ -110,13 +107,12 @@ function EqBand({
 
         {/* Thumb */}
         <div
-          className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-lg transition-colors duration-75 pointer-events-none ${
-            enabled
+          className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 shadow-lg transition-colors duration-75 pointer-events-none ${enabled
               ? gain !== 0
                 ? 'bg-accent border-accent/50 shadow-accent/30'
                 : 'bg-[#555] border-[#666]'
               : 'bg-[#333] border-[#444]'
-          }`}
+            }`}
           style={{ top: `calc(${thumbY}% - 8px)` }}
         />
       </div>
@@ -162,15 +158,14 @@ export function Equalizer({ onClose }: { onClose: () => void }): React.JSX.Eleme
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e1e]">
           <div className="flex items-center gap-2.5">
             <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" className="text-accent">
-              <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+              <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
             </svg>
             <span className="text-sm font-bold text-white tracking-tight">Equalizer</span>
             {/* Preset badge */}
-            <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
-              presetName === 'Custom'
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${presetName === 'Custom'
                 ? 'bg-[#ff6b6b]/15 text-[#ff8888]'
                 : 'bg-accent/15 text-accent'
-            }`}>
+              }`}>
               {presetName}
             </span>
           </div>
@@ -188,11 +183,10 @@ export function Equalizer({ onClose }: { onClose: () => void }): React.JSX.Eleme
             {/* Power toggle */}
             <button
               onClick={() => setEnabled(!enabled)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
-                enabled
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${enabled
                   ? 'bg-accent/15 text-accent hover:bg-accent/25'
                   : 'bg-white/5 text-[#555] hover:bg-white/10'
-              }`}
+                }`}
               title={enabled ? 'Disable EQ' : 'Enable EQ'}
             >
               <PowerIcon active={enabled} />
@@ -206,7 +200,7 @@ export function Equalizer({ onClose }: { onClose: () => void }): React.JSX.Eleme
               title="Close equalizer"
             >
               <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
               </svg>
             </button>
           </div>
@@ -219,11 +213,10 @@ export function Equalizer({ onClose }: { onClose: () => void }): React.JSX.Eleme
               <button
                 key={preset.name}
                 onClick={() => applyPreset(preset)}
-                className={`text-[11px] px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-all ${
-                  presetName === preset.name && presetName !== 'Custom'
+                className={`text-[11px] px-2.5 py-1 rounded-full font-medium whitespace-nowrap transition-all ${presetName === preset.name && presetName !== 'Custom'
                     ? 'bg-accent text-black shadow-sm shadow-accent/30'
                     : 'bg-[#1e1e1e] text-[#777] hover:bg-[#252525] hover:text-[#aaa]'
-                }`}
+                  }`}
               >
                 {preset.name}
               </button>
@@ -257,10 +250,6 @@ export function Equalizer({ onClose }: { onClose: () => void }): React.JSX.Eleme
           </div>
         </div>
 
-        {/* Footer hint */}
-        <div className="px-4 pb-3 text-[10px] text-[#333] text-center">
-          Drag sliders up/down · Changes saved automatically
-        </div>
       </div>
     </div>
   )

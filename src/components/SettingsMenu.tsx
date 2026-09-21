@@ -37,6 +37,11 @@ function AboutModal({ onClose }: { onClose: () => void }) {
   const [version, setVersion] = useState('...')
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [isChecking, setIsChecking] = useState(false)
+  const [showBugForm, setShowBugForm] = useState(false)
+  const [bugEmail, setBugEmail] = useState('')
+  const [bugMessage, setBugMessage] = useState('')
+  const [bugSubmitting, setBugSubmitting] = useState(false)
+  const [bugResult, setBugResult] = useState<'success' | 'error' | null>(null)
 
   useEffect(() => {
     window.lokal?.updater?.getVersion().then(setVersion).catch(() => {})
@@ -257,26 +262,123 @@ function AboutModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="w-full space-y-2 mb-5">
-          {/* Report a Bug */}
-          <a
-            href="https://formspree.io/f/xzezrzrw"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 w-full px-4 py-3 bg-[#181818] hover:bg-[#1f1f1f] border border-white/5 hover:border-white/10 rounded-xl transition-all group"
-          >
-            <div className="w-7 h-7 rounded-lg bg-[#ff6b6b]/15 flex items-center justify-center flex-shrink-0">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" className="text-[#ff6b6b]">
-                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 9h-2V5h2v6zm0 4h-2v-2h2v2z"/>
+
+          {/* ── Bug Report ── */}
+          {!showBugForm ? (
+            <button
+              onClick={() => { setShowBugForm(true); setBugResult(null) }}
+              className="flex items-center gap-3 w-full px-4 py-3 bg-[#181818] hover:bg-[#1f1f1f] border border-white/5 hover:border-white/10 rounded-xl transition-all group text-left"
+            >
+              <div className="w-7 h-7 rounded-lg bg-[#ff6b6b]/15 flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" className="text-[#ff6b6b]">
+                  <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 9h-2V5h2v6zm0 4h-2v-2h2v2z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-white group-hover:text-white/90">Report a Bug</p>
+                <p className="text-[11px] text-[#555] mt-0.5">Help us improve Lokal</p>
+              </div>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" className="text-[#444] group-hover:text-[#666] flex-shrink-0">
+                <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z" />
               </svg>
+            </button>
+          ) : bugResult === 'success' ? (
+            <div className="w-full px-4 py-4 bg-[#181818] border border-accent/20 rounded-xl flex flex-col items-center gap-2 text-center">
+              <div className="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" className="text-accent">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-white">Bug report sent!</p>
+              <p className="text-[11px] text-[#666]">Thanks for helping improve Lokal.</p>
+              <button
+                onClick={() => { setShowBugForm(false); setBugEmail(''); setBugMessage(''); setBugResult(null) }}
+                className="text-[11px] text-accent hover:underline mt-1"
+              >Done</button>
             </div>
-            <div className="flex-1 text-left">
-              <p className="text-sm font-semibold text-white group-hover:text-white/90">Report a Bug</p>
-              <p className="text-[11px] text-[#555] mt-0.5">Help us improve Lokal</p>
+          ) : (
+            <div className="w-full bg-[#181818] border border-white/5 rounded-xl overflow-hidden">
+              {/* Form header */}
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" className="text-[#ff6b6b]">
+                    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 9h-2V5h2v6zm0 4h-2v-2h2v2z" />
+                  </svg>
+                  <span className="text-xs font-semibold text-white">Report a Bug</span>
+                </div>
+                <button
+                  onClick={() => { setShowBugForm(false); setBugResult(null) }}
+                  className="text-[#555] hover:text-[#888] transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
+                </button>
+              </div>
+
+              {/* Fields */}
+              <div className="px-4 py-3 space-y-2.5">
+                <div>
+                  <label className="text-[10px] text-[#555] uppercase tracking-wider font-semibold block mb-1">Your email (optional)</label>
+                  <input
+                    type="email"
+                    value={bugEmail}
+                    onChange={(e) => setBugEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full bg-[#111] border border-white/8 rounded-lg px-3 py-1.5 text-xs text-white placeholder-[#444] focus:outline-none focus:border-accent/50 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-[#555] uppercase tracking-wider font-semibold block mb-1">What went wrong? *</label>
+                  <textarea
+                    value={bugMessage}
+                    onChange={(e) => setBugMessage(e.target.value)}
+                    placeholder="Describe the bug, what you were doing, and what you expected to happen..."
+                    rows={4}
+                    className="w-full bg-[#111] border border-white/8 rounded-lg px-3 py-1.5 text-xs text-white placeholder-[#444] focus:outline-none focus:border-accent/50 transition-colors resize-none"
+                  />
+                </div>
+
+                {bugResult === 'error' && (
+                  <p className="text-[11px] text-[#ff6b6b]">Failed to send. Please try again.</p>
+                )}
+
+                <button
+                  disabled={bugSubmitting || !bugMessage.trim()}
+                  onClick={async () => {
+                    if (!bugMessage.trim()) return
+                    setBugSubmitting(true)
+                    setBugResult(null)
+                    try {
+                      const res = await fetch('https://formspree.io/f/xzezrzrw', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify({
+                          email: bugEmail || 'anonymous',
+                          message: bugMessage,
+                          _subject: `[Lokal v${version}] Bug Report`,
+                          app_version: version,
+                        }),
+                      })
+                      const data = await res.json()
+                      setBugResult(data.ok ? 'success' : 'error')
+                    } catch {
+                      setBugResult('error')
+                    } finally {
+                      setBugSubmitting(false)
+                    }
+                  }}
+                  className={`w-full py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                    bugSubmitting || !bugMessage.trim()
+                      ? 'bg-white/10 text-[#555] cursor-not-allowed'
+                      : 'bg-[#ff6b6b] hover:bg-[#ff5555] text-white active:scale-95'
+                  }`}
+                >
+                  {bugSubmitting ? (
+                    <><div className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /><span>Sending...</span></>
+                  ) : 'Send Bug Report'}
+                </button>
+              </div>
             </div>
-            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" className="text-[#444] group-hover:text-[#666] flex-shrink-0">
-              <path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
-            </svg>
-          </a>
+          )}
 
           {/* GitHub */}
           <a
@@ -287,7 +389,7 @@ function AboutModal({ onClose }: { onClose: () => void }) {
           >
             <div className="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" className="text-[#ccc]">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
               </svg>
             </div>
             <div className="flex-1 text-left">
@@ -295,7 +397,7 @@ function AboutModal({ onClose }: { onClose: () => void }) {
               <p className="text-[11px] text-[#555] mt-0.5">PiyushBarala/lokal · Open source</p>
             </div>
             <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" className="text-[#444] group-hover:text-[#666] flex-shrink-0">
-              <path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+              <path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
             </svg>
           </a>
         </div>
