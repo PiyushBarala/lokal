@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { usePlayerStore, persistPlayerSession } from '../stores/playerStore'
+import { useEqualizerStore, EQ_BANDS } from '../stores/equalizerStore'
 
 /**
  * Module-level reference to the <audio> element.
@@ -7,6 +8,81 @@ import { usePlayerStore, persistPlayerSession } from '../stores/playerStore'
  * Nothing else touches it — this eliminates all race conditions.
  */
 let _audioEl: HTMLAudioElement | null = null
+
+// ── Web Audio API EQ chain ─────────────────────────────────────────
+// Module-level so the chain persists across re-renders
+let _audioCtx: AudioContext | null = null
+let _sourceNode: MediaElementAudioSourceNode | null = null
+let _filterNodes: BiquadFilterNode[] = []
+let _gainNode: GainNode | null = null
+let _isConnected = false
+
+/**
+ * Initialize the Web Audio API EQ chain for the given audio element.
+ * Creates AudioContext → MediaElementSource → 10 BiquadFilters → GainNode → destination.
+ * Safe to call multiple times — returns immediately if already connected.
+ */
+export function initAudioContext(audio: HTMLAudioElement): void {
+  if (_isConnected && _sourceNode) return
+
+  try {
+    if (!_audioCtx) {
+      _audioCtx = new AudioContext()
+    }
+
+    // Resume context if suspended (browser autoplay policy)
+    if (_audioCtx.state === 'suspended') {
+      _audioCtx.resume().catch(() => {})
+    }
+
+    // Only create source once per audio element to avoid InvalidStateError
+    if (!_sourceNode) {
+      _sourceNode = _audioCtx.createMediaElementSource(audio)
+    }
+
+    // Build filter chain
+    _filterNodes = EQ_BANDS.map((band) => {
+      const filter = _audioCtx!.createBiquadFilter()
+      filter.type = band.type
+      filter.frequency.value = band.freq
+      filter.Q.value = 1.0
+      filter.gain.value = 0
+      return filter
+    })
+
+    // Master gain node (for EQ bypass: when disabled we set all gains to 0)
+    _gainNode = _audioCtx.createGain()
+    _gainNode.gain.value = 1
+
+    // Chain: source → filter[0] → filter[1] → ... → filter[9] → gain → destination
+    let prev: AudioNode = _sourceNode
+    for (const filter of _filterNodes) {
+      prev.connect(filter)
+      prev = filter
+    }
+    prev.connect(_gainNode)
+    _gainNode.connect(_audioCtx.destination)
+
+    _isConnected = true
+    console.log('[AudioEngine] Web Audio EQ chain initialized')
+  } catch (e) {
+    console.warn('[AudioEngine] Failed to initialize Web Audio EQ chain:', e)
+  }
+}
+
+/**
+ * Apply equalizer gains to the filter chain.
+ * @param gains  Array of 10 gain values in dB
+ * @param enabled  When false, all gains are bypassed (set to 0)
+ */
+export function applyEqGains(gains: number[], enabled: boolean): void {
+  if (!_isConnected || _filterNodes.length === 0) return
+  for (let i = 0; i < _filterNodes.length; i++) {
+    try {
+      _filterNodes[i].gain.value = enabled ? (gains[i] ?? 0) : 0
+    } catch {}
+  }
+}
 
 /**
  * Imperatively seek the audio element. Call this from:
@@ -53,6 +129,7 @@ export function seekAudio(position: number): void {
  *   audio element ──► onTimeUpdate ──► store.seekPosition ──► UI (display only)
  *   UI drag / keyboard ──► seekAudio() ──► audio element  (no store roundtrip)
  *   Hardware / Bluetooth / SMTC ──► mediaSession / audio events ──► store.isPlaying
+ *   EQ store ──► applyEqGains() ──► BiquadFilterNode chain ──► audio output
  */
 export function AudioEngine(): null {
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -79,6 +156,37 @@ export function AudioEngine(): null {
     setDuration,
   } = usePlayerStore()
 
+  const { gains, enabled } = useEqualizerStore()
+
+  // ── Initialize Web Audio EQ chain once ──────────────────────────
+  useEffect(() => {
+    // Initialize after first user interaction to satisfy browser autoplay policy
+    const initOnInteraction = () => {
+      initAudioContext(audio)
+      // Apply saved EQ settings immediately
+      const { gains: savedGains, enabled: savedEnabled } = useEqualizerStore.getState()
+      applyEqGains(savedGains, savedEnabled)
+    }
+
+    // Try to init immediately (works if context was already unlocked)
+    initAudioContext(audio)
+    applyEqGains(useEqualizerStore.getState().gains, useEqualizerStore.getState().enabled)
+
+    // Also init on first interaction in case autoplay policy blocked it
+    window.addEventListener('click', initOnInteraction, { once: true })
+    window.addEventListener('keydown', initOnInteraction, { once: true })
+
+    return () => {
+      window.removeEventListener('click', initOnInteraction)
+      window.removeEventListener('keydown', initOnInteraction)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Apply EQ gains whenever store changes ────────────────────────
+  useEffect(() => {
+    applyEqGains(gains, enabled)
+  }, [gains, enabled])
+
   // ── Track change ────────────────────────────────────────────────
   useEffect(() => {
     if (!currentTrack) return
@@ -95,6 +203,10 @@ export function AudioEngine(): null {
   useEffect(() => {
     if (isPlaying) {
       if (audio.paused) {
+        // Resume AudioContext if suspended (user interaction happened)
+        if (_audioCtx && _audioCtx.state === 'suspended') {
+          _audioCtx.resume().catch(() => {})
+        }
         audio.play().catch(() => {})
       }
       if ('mediaSession' in navigator) {

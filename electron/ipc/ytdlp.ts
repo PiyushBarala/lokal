@@ -217,7 +217,9 @@ export function registerYtDlpHandlers(): void {
           '--fragment-retries', '5',
           '--socket-timeout', '30',
           '--print', 'after_move:filepath',
-          '--newline'
+          '--newline',
+          '--progress',
+          '--no-quiet',
         ]
 
         const startTime = Date.now()
@@ -314,11 +316,15 @@ export function registerYtDlpHandlers(): void {
         }
 
         proc.stdout.on('data', (chunk: Buffer) => {
-          stdoutBuffer += chunk.toString()
-          // Split on both \r\n and bare \r to prevent terminal progress overwrites from breaking line structure
-          const lines = stdoutBuffer.split(/\r\n|[\r\n]/)
-          stdoutBuffer = lines.pop() || ''
-          for (const line of lines) {
+          // yt-dlp uses \r to overwrite progress lines in terminals.
+          // We must split on \r FIRST (before \n) so every intermediate
+          // percentage line is processed rather than being silently replaced.
+          const raw = chunk.toString()
+          stdoutBuffer += raw
+          // Split on \r\n, standalone \r, or standalone \n
+          const parts = stdoutBuffer.split(/\r\n|\r|\n/)
+          stdoutBuffer = parts.pop() ?? ''
+          for (const line of parts) {
             processStdoutLine(line)
           }
         })

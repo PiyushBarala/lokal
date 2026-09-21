@@ -4,6 +4,7 @@ import { seekAudio } from './AudioEngine'
 import { ArtworkCell } from './ArtworkCell'
 import { AddToPlaylistModal } from './AddToPlaylistModal'
 import { useContextMenuStore } from '../stores/contextMenuStore'
+import { Equalizer } from './Equalizer'
 
 function formatTime(s: number): string {
   if (!isFinite(s) || isNaN(s)) return '0:00'
@@ -97,6 +98,13 @@ const MiniPlayerIcon = () => (
 // ── Generic artwork placeholder ──────────────────────────────────
 // (kept for clarity — ArtworkCell handles both cases now)
 
+const EqIcon = ({ active }: { active: boolean }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"
+    className={active ? 'text-accent' : 'currentColor'}>
+    <path d="M10 20h4V4h-4v16zm-6 0h4v-8H4v8zM16 9v11h4V9h-4z"/>
+  </svg>
+)
+
 // ── Main now-playing bar ─────────────────────────────────────────
 export function NowPlayingBar(): React.JSX.Element {
   const {
@@ -123,6 +131,8 @@ export function NowPlayingBar(): React.JSX.Element {
     toggleRightPanel,
     toggleExpandedNowPlaying,
   } = usePlayerStore()
+
+  const [showEq, setShowEq] = useState(false)
 
   // ── Seek drag state ──────────────────────────────────────────
   // While the user is dragging the seek thumb, we show dragPos instead of
@@ -363,8 +373,11 @@ export function NowPlayingBar(): React.JSX.Element {
         </div>
       </div>
 
-      {/* ── Volume + Queue + Now Playing + Expand + Mini Player ── */}
-      <div className="flex items-center gap-3 w-[260px] justify-end">
+      {/* ── Volume + Queue + Now Playing + Expand + Mini Player + EQ ── */}
+      <div className="flex items-center gap-3 w-[260px] justify-end relative">
+        {/* Equalizer panel (floating above bar) */}
+        {showEq && <Equalizer onClose={() => setShowEq(false)} />}
+
         {/* Now playing panel toggle */}
         <button
           id="btn-nowplaying-view"
@@ -373,6 +386,16 @@ export function NowPlayingBar(): React.JSX.Element {
           title="Now playing view"
         >
           <NowPlayingViewIcon active={showQueue && rightPanelTab === 'nowPlaying'} />
+        </button>
+
+        {/* EQ button */}
+        <button
+          id="btn-equalizer"
+          onClick={() => setShowEq((v) => !v)}
+          className={`transition-colors ${showEq ? 'text-accent' : 'text-[#b3b3b3] hover:text-white'}`}
+          title="Equalizer"
+        >
+          <EqIcon active={showEq} />
         </button>
 
         {/* Queue toggle */}
