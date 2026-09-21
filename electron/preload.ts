@@ -26,6 +26,12 @@ const api = {
     showInFolder: (filePath: string) => ipcRenderer.invoke('shell:show-in-folder', filePath)
   },
 
+  // Feedback / bug reports (proxied through main process to avoid CORS)
+  feedback: {
+    submit: (payload: { email: string; message: string; version: string }): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('feedback:submit', payload),
+  },
+
   // Library / scanner
   library: {
     pickFolder: () => ipcRenderer.invoke('library:pick-folder'),

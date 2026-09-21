@@ -348,18 +348,12 @@ function AboutModal({ onClose }: { onClose: () => void }) {
                     setBugSubmitting(true)
                     setBugResult(null)
                     try {
-                      const res = await fetch('https://formspree.io/f/xzezrzrw', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                        body: JSON.stringify({
-                          email: bugEmail || 'anonymous',
-                          message: bugMessage,
-                          _subject: `[Lokal v${version}] Bug Report`,
-                          app_version: version,
-                        }),
+                      const result = await window.lokal.feedback.submit({
+                        email: bugEmail,
+                        message: bugMessage,
+                        version,
                       })
-                      const data = await res.json()
-                      setBugResult(data.ok ? 'success' : 'error')
+                      setBugResult(result.ok ? 'success' : 'error')
                     } catch {
                       setBugResult('error')
                     } finally {

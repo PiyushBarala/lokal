@@ -349,6 +349,50 @@ app.whenReady().then(async () => {
     }
   })
 
+  // Bug report — POST to Formspree from main process (no CORS restrictions in Node.js)
+  ipcMain.handle('feedback:submit', async (_e, payload: { email: string; message: string; version: string }) => {
+    return new Promise<{ ok: boolean }>((resolve) => {
+      try {
+        const body = JSON.stringify({
+          email: payload.email || 'anonymous',
+          message: payload.message,
+          _subject: `[Lokal v${payload.version}] Bug Report`,
+          app_version: payload.version,
+        })
+        const https = require('https') as typeof import('https')
+        const req = https.request(
+          {
+            hostname: 'formspree.io',
+            path: '/f/xzezrzrw',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Content-Length': Buffer.byteLength(body),
+            },
+          },
+          (res) => {
+            let data = ''
+            res.on('data', (chunk) => { data += chunk })
+            res.on('end', () => {
+              try {
+                const json = JSON.parse(data)
+                resolve({ ok: json.ok === true || res.statusCode === 200 })
+              } catch {
+                resolve({ ok: res.statusCode === 200 })
+              }
+            })
+          }
+        )
+        req.on('error', () => resolve({ ok: false }))
+        req.write(body)
+        req.end()
+      } catch {
+        resolve({ ok: false })
+      }
+    })
+  })
+
   createWindow()
   registerUpdaterHandlers(mainWindow)
 
