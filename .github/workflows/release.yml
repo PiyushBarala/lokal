@@ -25,24 +25,45 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download yt-dlp and ffmpeg binaries
+      - name: Download yt-dlp
         shell: pwsh
-        continue-on-error: true
         run: |
-          New-Item -ItemType Directory -Force -Path resources/bin
+          New-Item -ItemType Directory -Force -Path resources/bin | Out-Null
           Write-Host "Downloading yt-dlp.exe..."
-          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile "resources/bin/yt-dlp.exe"
-          Write-Host "Downloading ffmpeg.exe..."
-          Invoke-WebRequest -Uri "https://github.com/ffbinaries/ffbinaries-prebuilt/releases/download/v6.1/ffmpeg-6.1-win-64.zip" -OutFile "ffmpeg.zip"
-          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "resources/bin" -Force
+          Invoke-WebRequest `
+            -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" `
+            -OutFile "resources/bin/yt-dlp.exe"
+          Write-Host "yt-dlp downloaded: $((Get-Item resources/bin/yt-dlp.exe).Length) bytes"
+
+      - name: Download ffmpeg
+        shell: pwsh
+        run: |
+          Write-Host "Downloading ffmpeg zip..."
+          Invoke-WebRequest `
+            -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" `
+            -OutFile "ffmpeg.zip"
+          Write-Host "Extracting ffmpeg.exe..."
+          # Extract only ffmpeg.exe from the nested bin/ folder
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead("$PWD\ffmpeg.zip")
+          $ffmpegEntry = $zip.Entries | Where-Object { $_.Name -eq 'ffmpeg.exe' } | Select-Object -First 1
+          if ($ffmpegEntry) {
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($ffmpegEntry, "$PWD\resources\bin\ffmpeg.exe", $true)
+            Write-Host "ffmpeg extracted: $((Get-Item resources/bin/ffmpeg.exe).Length) bytes"
+          } else {
+            Write-Error "ffmpeg.exe not found in zip"
+            exit 1
+          }
+          $zip.Dispose()
           Remove-Item "ffmpeg.zip"
-          Get-ChildItem resources/bin
 
-      - name: Build app
+      - name: Build renderer and main process
         run: npm run build
+        env:
+          NODE_ENV: production
 
-      - name: Build and publish release
+      - name: Package and publish release
+        run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --publish always
-
+          NODE_ENV: production
