@@ -256,19 +256,48 @@ function AboutModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <div className="w-full bg-[#181818] rounded-xl p-3 text-xs text-[#888] space-y-1 text-left mb-5 border border-white/5">
-          <div className="flex justify-between">
-            <span>Platform</span>
-            <span className="text-white font-medium">Windows</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Audio Engine</span>
-            <span className="text-white font-medium">HTML5 + Native Media</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Library</span>
-            <span className="text-white font-medium">SQLite Local Database</span>
-          </div>
+        <div className="w-full space-y-2 mb-5">
+          {/* Report a Bug */}
+          <a
+            href="https://formspree.io/f/xzezrzrw"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 w-full px-4 py-3 bg-[#181818] hover:bg-[#1f1f1f] border border-white/5 hover:border-white/10 rounded-xl transition-all group"
+          >
+            <div className="w-7 h-7 rounded-lg bg-[#ff6b6b]/15 flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" className="text-[#ff6b6b]">
+                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 9h-2V5h2v6zm0 4h-2v-2h2v2z"/>
+              </svg>
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-semibold text-white group-hover:text-white/90">Report a Bug</p>
+              <p className="text-[11px] text-[#555] mt-0.5">Help us improve Lokal</p>
+            </div>
+            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" className="text-[#444] group-hover:text-[#666] flex-shrink-0">
+              <path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+            </svg>
+          </a>
+
+          {/* GitHub */}
+          <a
+            href="https://github.com/PiyushBarala/lokal"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 w-full px-4 py-3 bg-[#181818] hover:bg-[#1f1f1f] border border-white/5 hover:border-white/10 rounded-xl transition-all group"
+          >
+            <div className="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" className="text-[#ccc]">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+              </svg>
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-semibold text-white group-hover:text-white/90">View Source on GitHub</p>
+              <p className="text-[11px] text-[#555] mt-0.5">PiyushBarala/lokal · Open source</p>
+            </div>
+            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" className="text-[#444] group-hover:text-[#666] flex-shrink-0">
+              <path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+            </svg>
+          </a>
         </div>
 
         <button
